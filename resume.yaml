@@ -1,0 +1,57 @@
+# Source of truth for the resume site, PDF, and DOCX.
+# Edit this file, then run `python build.py` to regenerate site/index.html,
+# site/resume.pdf, and site/resume.docx from it. Nothing else needs to change.
+
+basics:
+  name: Your Name
+  title: Software Engineer
+  email: you@example.com
+  phone: "555-123-4567"
+  location: San Francisco, CA
+  website: evancooperman.com
+  linkedin: linkedin.com/in/yourname
+  github: github.com/yourname
+  summary: >
+    One or two sentences on who you are professionally and what you're
+    looking for or known for. Keep it tight -- this is the only prose
+    paragraph on the page.
+
+experience:
+  - company: Example Corp
+    title: Senior Software Engineer
+    location: San Francisco, CA
+    start: Jan 2023
+    end: Present
+    bullets:
+      - Led the redesign of X, resulting in Y% improvement in Z.
+      - Shipped A, working cross-functionally with B and C teams.
+      - Mentored N engineers; owned on-call rotation for the D service.
+  - company: Prior Company
+    title: Software Engineer
+    location: Remote
+    start: Jun 2020
+    end: Dec 2022
+    bullets:
+      - Built X from scratch, now handling Y requests/day.
+      - Reduced Z by N% through a specific technical change.
+
+education:
+  - school: Example University
+    degree: B.S.
+    field: Computer Science
+    start: "2016"
+    end: "2020"
+    details: ""
+
+skills:
+  - category: Languages
+    items: [Python, TypeScript, SQL]
+  - category: Frameworks
+    items: [FastAPI, React, SQLAlchemy]
+  - category: Infrastructure
+    items: [Docker, GitHub Actions, Digital Ocean, Cloudflare]
+
+projects:
+  - name: Project Name
+    description: One line on what it does and why it's notable.
+    link: github.com/yourname/project

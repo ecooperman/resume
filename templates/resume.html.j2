@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ basics.name }} — Resume</title>
+<style>
+  :root {
+    --ink: #1a1d23;
+    --muted: #5b6270;
+    --rule: #dde1e7;
+    --accent: #2454ff;
+    --bg: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: #eef0f3;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+    background: var(--bg);
+    padding: 56px 64px 72px;
+  }
+  header.hero {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 24px;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 18px;
+    margin-bottom: 22px;
+  }
+  h1 {
+    font-size: 30px;
+    font-weight: 700;
+    margin: 0 0 4px;
+    letter-spacing: -0.02em;
+  }
+  .role {
+    font-size: 15px;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0;
+  }
+  .contact {
+    text-align: right;
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.7;
+    white-space: nowrap;
+  }
+  .contact a { color: var(--muted); text-decoration: none; }
+  .contact a:hover { color: var(--accent); }
+
+  .summary {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin: 0 0 30px;
+    max-width: 640px;
+  }
+
+  section { margin-bottom: 26px; }
+  section:last-child { margin-bottom: 0; }
+
+  h2 {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .entry { margin-bottom: 16px; }
+  .entry:last-child { margin-bottom: 0; }
+  .entry-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .entry-title { font-size: 14.5px; font-weight: 700; }
+  .entry-org { font-weight: 500; color: var(--ink); }
+  .entry-sub { font-size: 13px; color: var(--muted); margin-top: 1px; }
+  .entry-dates {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  ul.bullets {
+    margin: 8px 0 0;
+    padding-left: 18px;
+  }
+  ul.bullets li {
+    font-size: 13.5px;
+    line-height: 1.55;
+    margin-bottom: 4px;
+    color: var(--ink);
+  }
+
+  .skills-grid {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    row-gap: 8px;
+    column-gap: 16px;
+    font-size: 13.5px;
+  }
+  .skills-grid dt { font-weight: 600; color: var(--muted); }
+  .skills-grid dd { margin: 0; }
+
+  .project { margin-bottom: 10px; font-size: 13.5px; }
+  .project:last-child { margin-bottom: 0; }
+  .project-name { font-weight: 700; }
+  .project-link { font-size: 12px; color: var(--accent); text-decoration: none; }
+
+  .download-bar {
+    max-width: 760px;
+    margin: 24px auto 0;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding: 0 4px;
+  }
+  .download-bar a {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink);
+    background: #fff;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 8px 14px;
+    text-decoration: none;
+  }
+  .download-bar a:hover { border-color: var(--accent); color: var(--accent); }
+
+  @media (max-width: 700px) {
+    .page { padding: 32px 24px 48px; }
+    header.hero { flex-direction: column; align-items: flex-start; }
+    .contact { text-align: left; }
+    .download-bar { flex-direction: column; padding: 0 24px; }
+  }
+
+  @media print {
+    body { background: #fff; }
+    .page { max-width: none; padding: 0.4in 0.55in; }
+    .download-bar { display: none; }
+  }
+</style>
+</head>
+<body>
+  {% if show_download_bar %}
+  <div class="download-bar">
+    <a href="/resume.pdf" download>Download PDF</a>
+    <a href="/resume.docx" download>Download DOCX</a>
+  </div>
+  {% endif %}
+  <div class="page">
+    <header class="hero">
+      <div>
+        <h1>{{ basics.name }}</h1>
+        <p class="role">{{ basics.title }}</p>
+      </div>
+      <div class="contact">
+        {{ basics.location }}<br>
+        <a href="mailto:{{ basics.email }}">{{ basics.email }}</a> · {{ basics.phone }}<br>
+        {% if basics.website %}<a href="https://{{ basics.website }}">{{ basics.website }}</a>{% endif %}
+        {% if basics.linkedin %} · <a href="https://{{ basics.linkedin }}">{{ basics.linkedin }}</a>{% endif %}
+        {% if basics.github %} · <a href="https://{{ basics.github }}">{{ basics.github }}</a>{% endif %}
+      </div>
+    </header>
+
+    {% if basics.summary %}
+    <p class="summary">{{ basics.summary }}</p>
+    {% endif %}
+
+    <section>
+      <h2>Experience</h2>
+      {% for job in experience %}
+      <div class="entry">
+        <div class="entry-head">
+          <div>
+            <span class="entry-title">{{ job.title }}</span>
+            <span class="entry-org"> — {{ job.company }}</span>
+            <div class="entry-sub">{{ job.location }}</div>
+          </div>
+          <div class="entry-dates">{{ job.start }} – {{ job.end }}</div>
+        </div>
+        {% if job.bullets %}
+        <ul class="bullets">
+          {% for b in job.bullets %}<li>{{ b }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </section>
+
+    <section>
+      <h2>Education</h2>
+      {% for ed in education %}
+      <div class="entry">
+        <div class="entry-head">
+          <div>
+            <span class="entry-title">{{ ed.degree }}{% if ed.field %}, {{ ed.field }}{% endif %}</span>
+            <div class="entry-sub">{{ ed.school }}</div>
+          </div>
+          <div class="entry-dates">{{ ed.start }} – {{ ed.end }}</div>
+        </div>
+        {% if ed.details %}<div class="entry-sub">{{ ed.details }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </section>
+
+    <section>
+      <h2>Skills</h2>
+      <dl class="skills-grid">
+        {% for s in skills %}
+        <dt>{{ s.category }}</dt>
+        <dd>{{ s['items'] | join(', ') }}</dd>
+        {% endfor %}
+      </dl>
+    </section>
+
+    {% if projects %}
+    <section>
+      <h2>Projects</h2>
+      {% for p in projects %}
+      <div class="project">
+        <span class="project-name">{{ p.name }}</span>
+        {% if p.link %} — <a class="project-link" href="https://{{ p.link }}">{{ p.link }}</a>{% endif %}
+        <div class="entry-sub">{{ p.description }}</div>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+  </div>
+</body>
+</html>

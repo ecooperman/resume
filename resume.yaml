@@ -3,55 +3,186 @@
 # site/resume.pdf, and site/resume.docx from it. Nothing else needs to change.
 
 basics:
-  name: Your Name
-  title: Software Engineer
-  email: you@example.com
-  phone: "555-123-4567"
-  location: San Francisco, CA
+  name: Evan Cooperman
+  title: Partner, Head of Adobe Engineering
+  email: evancooperman@gmail.com
+  phone: "217.390.1834"
+  location: Chicago, IL (Remote)
   website: evancooperman.com
-  linkedin: linkedin.com/in/yourname
-  github: github.com/yourname
+  linkedin: linkedin.com/in/evancooperman
   summary: >
-    One or two sentences on who you are professionally and what you're
-    looking for or known for. Keep it tight -- this is the only prose
-    paragraph on the page.
+    Technical delivery leader and architect with 15+ years designing,
+    building, and leading delivery of enterprise Adobe Experience Cloud
+    solutions -- AEM, commerce (Adobe Commerce/Magento, SAP Commerce,
+    nopCommerce), Adobe Workfront, Adobe Target, and Adobe Experience
+    Platform (CDP/CJA) -- for Fortune 500 and other global enterprise
+    clients. Leads multiple concurrent delivery teams and has headed the
+    Adobe practice at several consultancies, owning technical architecture,
+    staffing, project scoping, delivery estimation, and cross-functional
+    leadership from discovery through go-live. Also owns internal IT and
+    identity systems end-to-end, pairing AI tools (Claude) with the
+    Microsoft Graph and Entra ID APIs to automate cross-system workflows
+    native admin tooling can't handle on its own.
 
 experience:
-  - company: Example Corp
-    title: Senior Software Engineer
-    location: San Francisco, CA
-    start: Jan 2023
+  - company: Better Digital
+    title: Partner, Head of Adobe Engineering
+    location: Chicago, IL (Remote)
+    start: May 2025
     end: Present
     bullets:
-      - Led the redesign of X, resulting in Y% improvement in Z.
-      - Shipped A, working cross-functionally with B and C teams.
-      - Mentored N engineers; owned on-call rotation for the D service.
-  - company: Prior Company
-    title: Software Engineer
-    location: Remote
-    start: Jun 2020
+      - Own technical delivery, architecture oversight, and staffing across all client projects -- including onboarding and training developers to work effectively on each assigned engagement; serve as the escalation path for technical issues company-wide.
+      - Support business development and project scoping alongside delivery leadership, producing estimates and resourcing plans based on licensing and implementation requirements.
+      - "Cigna: Took over and modernized an existing AEM implementation -- enhancing componentry (URL shortening, Marketo form integration, Brightcove video, Spotify podcast/playlist integration), rebuilding the data layer and legacy redirect logic, and completing an SSL migration; also inherited and stabilized a content-fragment-driven AEM SPA customer journey application, shipping new experiences on top of the existing codebase."
+      - "Hazelden Betty Ford Foundation: Architected a custom AEM SPA (React) application to publish digital books and assets, including subscription purchasing and permissioning, with Coveo integrated for enterprise-wide search across books, book content, and assets."
+      - Manage 100% of internal IT and systems infrastructure, including SSO/SCIM integrations and Microsoft Entra ID administration; deployed and manage company-wide MDM via Rippling.
+      - Lead a compliance automation program supporting SOC 2 and HIPAA compliance, applying the Principle of Least Privilege and Zero Trust security practices.
+      - Use Claude alongside the Microsoft Graph API to automate and troubleshoot cross-system identity and access workflows beyond what native admin tools support.
+      - Use AI coding assistants (Claude, Microsoft and GitHub Copilot) daily across architecture, development, debugging, and troubleshooting -- including using Claude/Claude Code with the Miro API to generate technical diagrams from architecture docs and other artifacts, freeing up time for higher-value work over busy work.
+      - Hands-on with Adobe's AI-driven personalization and customer data stack -- Adobe Experience Platform (CDP + Customer Journey Analytics) and Adobe Target -- primarily integrating with AEM and Marketo.
+      - Drive Dynamic Media / Scene7 automated smart cropping and dynamic image rendition strategy at scale.
+      - Oversee CI/CD tooling (Jenkins) and deployment pipelines across the Adobe stack.
+
+  - company: Better Digital
+    title: Senior Solutions Architect
+    location: Chicago, IL (Remote)
+    start: Mar 2024
+    end: May 2025
+    bullets:
+      - Built a publishing system in AEM using React + SPA editor for a client.  The client leverages this system to build over 60 digital books and counting, allowing for a permissioning schema that allows their business team to bundle the books and resources however they want to ensure they can be creative when selling bundles of content.  Heavily customized to meet their needs including custom admin screens tied to a DB to store credentials/subscriptions/user information.  Included things like being able to bookmark and highlight content, add notes to the bookmarks/highlights, and a way to find resources associated with a digital book.
+      - Helped with a migration from other CMSs on to AEM for a Fortune 50 healthcare company to enable faster adoption of AEM as their CMS.  Came with all sorts of challenges around DNS, governance, security, permissioning, content migration, and plenty more.
+
+  - company: Rightpoint
+    title: Director, AEM
+    location: Chicago (Remote)
+    start: Dec 2022
+    end: May 2025
+    bullets:
+      - "Trex: Architected and built custom AEM HTL components for a deck-visualization and build experience -- including a deck-material swatch catalog and an interactive deck-builder flow -- integrated with Salesforce and, via a serverless ETL layer on Adobe I/O, with nopCommerce checkout (CIF v2); optimized delivery of high-resolution product imagery using Scene7 Dynamic Media Smart Imaging."
+      - "Abbott: Navigated GDPR and MLR compliance requirements, building Adobe Workfront workflows to automate content approvals, dynamic AEM content creation using custom AEM servlets, and design-asset intake -- syncing final approvals to Veeva for audit-ready MLR documentation. Delivered a custom AEM SPA (React) purchase/checkout flow for the Freestyle Libre 2 built on Abbott's global component library, while working alongside 10-20 separate concurrent AEM workstreams on branching strategy, conflict mitigation, unit test coverage, and release-pipeline integration with Abbott's infrastructure team."
+      - "TaylorMade Golf: Delivered asset integration between AEM and a downstream PIM system."
+      - Led teams and architected complex content + commerce implementations integrating AEM with Adobe Commerce, Magento, and nopCommerce for large enterprise clients, staffing and training developers appropriately for each engagement.
+      - Drove Dynamic Media strategy across multiple enterprise clients to deliver high-resolution imagery at scale without performance impact, leveraging Scene7 presets and smart crops; consistently met or exceeded client expectations on image quality and customization.
+
+  - company: Rightpoint
+    title: Senior Solutions Architect
+    location: Chicago (Remote)
+    start: Apr 2021
     end: Dec 2022
     bullets:
-      - Built X from scratch, now handling Y requests/day.
-      - Reduced Z by N% through a specific technical change.
+      - Started the Adobe practice and led/delivered the first large project successfully, generating enough demand that Rightpoint acquired another Adobe consultancy to keep pace; helped integrate the acquired team to align on a consistent methodology and culture.
+      - Architected content + commerce solutions via AEM and various commerce systems; oversaw project development across the Adobe stack to ensure best-in-class architecture integrating commerce and other systems, aimed at driving innovation and adoption of global websites.
+      - Architected React + AEM solutions rendering commerce components sourced from Adobe Commerce through a middleware ESL layer.
+      - Began focusing more on staffing, building strong SOWs, and leading multiple concurrent project teams at once.
+
+  - company: SMITH
+    title: Senior Technical Architect
+    location: Remote
+    start: Mar 2019
+    end: Apr 2021
+    bullets:
+      - Led development and architecture for content + commerce implementations on AEM, including a custom platform-agnostic commerce connector.
+      - Built real-time integration between AEM and SAP Commerce, enabling live commerce data retrieval and order placement.
+      - Delivered integrations connecting AEM and SAP Commerce with external enterprise systems for multiple long-term clients.
+
+  - company: SMITH
+    title: Technical Architect
+    location: Remote
+    start: Jun 2017
+    end: Mar 2019
+    bullets:
+      - Focused on integrating AEM with commerce platforms to drive a strong experience for authors and marketers in AEM while providing the power of a commerce platform.
+
+  - company: SapientRazorfish
+    title: Technical Architect
+    location: Chicago
+    start: Aug 2014
+    end: Jun 2017
+    bullets:
+      - Worked through the full SDLC from discovery through build and delivery, architecting with hybris and AEM to design and build highly scalable eCommerce solutions while maintaining the full flexibility of AEM for content and marketing.
+      - Led development on AEM content projects for enterprise clients and architected AEM solutions.
+      - Began building content + commerce integrations, laying the groundwork for later commerce-focused architecture roles.
+
+  - company: Acquity Group (part of Accenture Interactive)
+    title: Manager
+    location: Greater Chicago Area
+    start: Nov 2011
+    end: Aug 2014
+    bullets:
+      - Continued developing complex, scalable CMS and eCommerce solutions for enterprise clients using hybris and Adobe AEM (CQ), with a focus on architecture, management, and leadership.
+      - Promoted to Manager after a year, having been hired as a Senior Associate.
+
+  - company: Sole Proprietorship
+    title: Contractor
+    location: Remote
+    start: Sep 2011
+    end: Oct 2011
+    bullets:
+      - Independent consulting using Blue Martini 9 (eCommerce) to enhance a client site.
+
+  - company: Two Cogs Design + Development
+    title: President
+    location: Chicago
+    start: Dec 2010
+    end: May 2016
+    bullets:
+      - Built and now maintain the Raptor Delivery Service online ordering platform on Drupal 6; developed ~20 custom modules extending Ubercart's core functionality for high-volume order processing, seamless AJAX UX, notifications, store hours, and more.
+
+  - company: inno360, LLC
+    title: Core Developer
+    location: Remote (from home)
+    start: Sep 2010
+    end: Aug 2011
+    bullets:
+      - Built an inventor search engine for General Mills, Procter & Gamble, and the U.S. Air Force using the Zend framework, integrated APIs, and clustering/visualization libraries (Carrot2, Circles, FoamTree, Google Maps); used JavaScript heavily for AJAX integration with external data sources, tied together with jQuery, Ext JS 3, and YUI 2.
+
+  - company: Collaborative Software Initiative
+    title: Core Developer
+    location: Remote
+    start: Feb 2010
+    end: Mar 2011
+    bullets:
+      - Contracted to support inno360's inventor search engine project (see above).
+
+  - company: Acquity Group
+    title: Senior Associate (Technical Consultant)
+    location: Chicago
+    start: Feb 2008
+    end: Feb 2010
+    bullets:
+      - Worked with Blue Martini commerce and Day Communiqué (now AEM) on advanced implementations and integrations.
+      - Promoted to Senior Associate after a year, having been hired as an Associate; began focusing more on architecture than pure development/implementation.
 
 education:
-  - school: Example University
+  - school: University of Illinois Urbana-Champaign
     degree: B.S.
-    field: Computer Science
-    start: "2016"
-    end: "2020"
+    field: Computer Science (Engineering)
+    start: "2001"
+    end: "2007"
     details: ""
 
-skills:
-  - category: Languages
-    items: [Python, TypeScript, SQL]
-  - category: Frameworks
-    items: [FastAPI, React, SQLAlchemy]
-  - category: Infrastructure
-    items: [Docker, GitHub Actions, Digital Ocean, Cloudflare]
+certifications:
+  - name: Adobe Certified Expert - Adobe Experience Manager Sites Developer
+    issuer: Adobe
+  - name: hybris 5 core certification
+    issuer: SAP Hybris
+  - name: hybris 5 commerce certification
+    issuer: SAP Hybris
 
-projects:
-  - name: Project Name
-    description: One line on what it does and why it's notable.
-    link: github.com/yourname/project
+skills:
+  - category: Content & Web Platforms
+    items: ["Adobe Experience Manager (AEM, all versions since 4.2, incl. AEM as a Cloud Service)", "Edge Delivery Services (Universal Editor, DA Live)", "AEM SPA Editor", Drupal, "Drupal 6.x"]
+  - category: Commerce
+    items: ["SAP Commerce (hybris)", "Adobe Commerce/Magento", nopCommerce, "Commerce Integration Framework (CIF v2)", "Custom commerce connectors"]
+  - category: Adobe Cloud, AI & Marketing
+    items: ["Adobe Experience Platform (CDP, CJA)", "Adobe Target", "Adobe Workfront", "Adobe Campaign", "Marketo Engage", "Adobe I/O (App Builder/Runtime)", "Launch (Tags)", "Dynamic Media/Scene7 (Smart Imaging)", "Audience Manager"]
+  - category: Enterprise Integrations
+    items: [Salesforce, Veeva, Coveo, Brightcove, "Google Maps/Google APIs", "REST APIs", GraphQL]
+  - category: Identity & Systems
+    items: [SSO/SCIM, "Microsoft Entra ID", "Microsoft Graph API", "Rippling (MDM)", "Jenkins/CI-CD pipelines", Git]
+  - category: Languages (Expert)
+    items: [Java, JavaScript, HTML]
+  - category: Languages (Proficient)
+    items: [Python, PHP, CSS, SQL]
+  - category: Frameworks & Tools
+    items: ["React (+AEM, +Node.js)", "Node.js", jQuery, Webpack, Solr, XML, MySQL, Linux, LAMP]

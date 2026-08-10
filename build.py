@@ -116,8 +116,17 @@ def build_docx(data):
         if ed.get("field"):
             title += f", {ed['field']}"
         _run(p, title, bold=True, size=11, color=INK)
-        _run(p, f"\t{ed.get('start', '')} – {ed.get('end', '')}", size=9.5, color=MUTED)
+        if ed.get("start") or ed.get("end"):
+            _run(p, f"\t{ed.get('start', '')} – {ed.get('end', '')}", size=9.5, color=MUTED)
         _run(doc.add_paragraph(), ed.get("school", ""), size=9.5, color=MUTED)
+
+    if data.get("certifications"):
+        _heading(doc, "Certifications")
+        for cert in data["certifications"]:
+            p = doc.add_paragraph(style="List Bullet")
+            _run(p, cert["name"], size=10, color=INK)
+            if cert.get("issuer"):
+                _run(p, f" — {cert['issuer']}", size=9.5, color=MUTED)
 
     _heading(doc, "Skills")
     for s in data.get("skills", []):

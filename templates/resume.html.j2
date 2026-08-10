@@ -212,12 +212,23 @@
             <span class="entry-title">{{ ed.degree }}{% if ed.field %}, {{ ed.field }}{% endif %}</span>
             <div class="entry-sub">{{ ed.school }}</div>
           </div>
-          <div class="entry-dates">{{ ed.start }} – {{ ed.end }}</div>
+          {% if ed.start or ed.end %}<div class="entry-dates">{{ ed.start }} – {{ ed.end }}</div>{% endif %}
         </div>
         {% if ed.details %}<div class="entry-sub">{{ ed.details }}</div>{% endif %}
       </div>
       {% endfor %}
     </section>
+
+    {% if certifications %}
+    <section>
+      <h2>Certifications</h2>
+      <ul class="bullets" style="padding-left: 0; list-style: none;">
+        {% for c in certifications %}
+        <li>{{ c.name }}{% if c.issuer %} <span class="entry-sub" style="display:inline;">— {{ c.issuer }}</span>{% endif %}</li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
 
     <section>
       <h2>Skills</h2>

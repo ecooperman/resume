@@ -82,8 +82,20 @@ republish.
    once, as yourself, then sanity-check the full build as the `deploy` user:
    ```bash
    sudo /opt/apps/resume/venv/bin/playwright install-deps chromium
-   sudo -iu deploy bash -c 'cd /opt/apps/resume && source venv/bin/activate && python build.py'
+   sudo -iu deploy /opt/apps/resume/venv/bin/playwright install chromium
+   sudo -iu deploy /opt/apps/resume/venv/bin/python /opt/apps/resume/build.py
    ```
+   Call the venv's binaries by absolute path rather than
+   `sudo -iu deploy bash -c 'source venv/bin/activate && ...'` — it's easy for
+   that pattern to silently run as root instead (wrong user's Playwright
+   browser cache, `site/` output ends up root-owned and unreadable by the
+   `deploy`-run service) or to skip activation and hit
+   `Command 'playwright' not found`. `build.py` resolves all its paths off its
+   own file location, so calling it by absolute path from anywhere is safe.
+   If either of those mistakes already happened, reset with
+   `sudo chown -R deploy:deploy /opt/apps/resume` and redo the two commands
+   above.
+
    Confirm all three files landed: `ls -la /opt/apps/resume/site/`. Routine
    deploys only re-run `playwright install chromium` (cache hit, no root
    needed) before `python build.py`, already in

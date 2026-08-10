@@ -5,7 +5,7 @@ After=network.target
 [Service]
 User=deploy
 WorkingDirectory=/opt/apps/resume
-ExecStart=/opt/apps/resume/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8030
+ExecStart=/opt/apps/resume/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8040
 Restart=on-failure
 RestartSec=3
 

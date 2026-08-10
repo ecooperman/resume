@@ -20,6 +20,9 @@ jobs:
             git pull origin main
             source venv/bin/activate
             pip install -q -r requirements.txt
-            playwright install --with-deps chromium
+            # Browser binary only -- no root needed, safe for the deploy user.
+            # OS-level shared libs (`playwright install-deps`) are a one-time
+            # setup step run by hand with real sudo, see README.md.
+            playwright install chromium
             python build.py
             sudo systemctl restart resume

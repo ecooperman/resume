@@ -19,10 +19,10 @@ python build.py
 ```
 
 This regenerates everything in `site/`:
-- `index.html` — the page, styled from `templates/resume.html.j2`
-- `resume.pdf` — that same page, printed by a headless Chromium (Playwright),
+- `index.html` - the page, styled from `templates/resume.html.j2`
+- `resume.pdf` - that same page, printed by a headless Chromium (Playwright),
   so it's always visually in sync with the web version for free
-- `resume.docx` — built separately with `python-docx` (Word can't render CSS,
+- `resume.docx` - built separately with `python-docx` (Word can't render CSS,
   so this is styled to look clean, not to be a pixel copy of the HTML)
 
 ## Local setup
@@ -40,7 +40,7 @@ Then open http://localhost:8040.
 
 ## Deploy
 
-Follows the same pattern as the other apps in this directory — see
+Follows the same pattern as the other apps in this directory - see
 `../DEPLOYMENT.md`. Port `8040`, service name `resume`, hostname
 `resume.evancooperman.com` (left behind the existing wildcard Cloudflare Access
 gate for now, not public). `deploy/resume.service` and
@@ -50,10 +50,10 @@ republish.
 
 ### One-time droplet setup
 
-1. **GitHub secrets** — on the `resume` repo: `DO_HOST`, `DO_USER=deploy`,
+1. **GitHub secrets** - on the `resume` repo: `DO_HOST`, `DO_USER=deploy`,
    `DO_SSH_KEY` (same values as your other app repos).
 
-2. **Sudoers** — add this app's service to the `deploy` user's narrow
+2. **Sudoers** - add this app's service to the `deploy` user's narrow
    restart-only sudo rights:
    ```bash
    sudo visudo -f /etc/sudoers.d/deploy-restart
@@ -76,7 +76,7 @@ republish.
    exit   # back to your own sudo-capable user
    ```
 
-4. **Playwright's OS-level dependencies (root, one-time only)** — the
+4. **Playwright's OS-level dependencies (root, one-time only)** - the
    `deploy` user's sudo is scoped to just `systemctl restart`, so it *can't*
    run `apt-get install` itself. Install the shared libraries Chromium needs
    once, as yourself, then sanity-check the full build as the `deploy` user:
@@ -86,7 +86,7 @@ republish.
    sudo -iu deploy /opt/apps/resume/venv/bin/python /opt/apps/resume/build.py
    ```
    Call the venv's binaries by absolute path rather than
-   `sudo -iu deploy bash -c 'source venv/bin/activate && ...'` — it's easy for
+   `sudo -iu deploy bash -c 'source venv/bin/activate && ...'` - it's easy for
    that pattern to silently run as root instead (wrong user's Playwright
    browser cache, `site/` output ends up root-owned and unreadable by the
    `deploy`-run service) or to skip activation and hit
@@ -109,7 +109,7 @@ republish.
    curl -m 5 http://127.0.0.1:8040   # sanity check before wiring up the tunnel
    ```
 
-6. **cloudflared ingress** — add to `/etc/cloudflared/config.yml`, *above*
+6. **cloudflared ingress** - add to `/etc/cloudflared/config.yml`, *above*
    the catch-all `- service: http_status:404` line:
    ```yaml
      - hostname: resume.evancooperman.com
@@ -125,14 +125,14 @@ republish.
    you'll need to update/replace that record in the Cloudflare dashboard
    instead of using `route dns`.
 
-7. **Access** — nothing to do. The existing wildcard Access application
+7. **Access** - nothing to do. The existing wildcard Access application
    (`*.evancooperman.com`) already covers `resume`, so this stays behind the
    same email + one-time-PIN login as your other apps, per "leave it locked
    down for now."
 
-8. **Cache Rule (bypass)** — Caching → Cache Rules → add
+8. **Cache Rule (bypass)** - Caching → Cache Rules → add
    `resume.evancooperman.com` to the existing bypass rule (or create one), so a
    `resume.yaml` update actually shows up without a manual "Purge Everything"
    after each deploy.
 
-9. Push to `main` — CI takes it from here on future updates.
+9. Push to `main` - CI takes it from here on future updates.

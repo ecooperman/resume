@@ -102,7 +102,7 @@ def build_docx(data):
     _heading(doc, "Experience")
     for job in data.get("experience", []):
         p = doc.add_paragraph()
-        _run(p, f"{job['title']} — {job['company']}", bold=True, size=11, color=INK)
+        _run(p, f"{job['title']} - {job['company']}", bold=True, size=11, color=INK)
         _run(p, f"\t{job.get('start', '')} – {job.get('end', '')}", size=9.5, color=MUTED)
         if job.get("location"):
             _run(doc.add_paragraph(), job["location"], size=9.5, color=MUTED)
@@ -126,7 +126,7 @@ def build_docx(data):
             p = doc.add_paragraph(style="List Bullet")
             _run(p, cert["name"], size=10, color=INK)
             if cert.get("issuer"):
-                _run(p, f" — {cert['issuer']}", size=9.5, color=MUTED)
+                _run(p, f" - {cert['issuer']}", size=9.5, color=MUTED)
 
     _heading(doc, "Skills")
     for s in data.get("skills", []):
@@ -140,7 +140,7 @@ def build_docx(data):
             p = doc.add_paragraph()
             _run(p, proj["name"], bold=True, size=10.5, color=INK)
             if proj.get("link"):
-                _run(p, f" — {proj['link']}", size=9.5, color=MUTED)
+                _run(p, f" - {proj['link']}", size=9.5, color=MUTED)
             _run(doc.add_paragraph(), proj.get("description", ""), size=10, color=INK)
 
     out = SITE / "resume.docx"

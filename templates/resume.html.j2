@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ basics.name }} — Resume</title>
+<title>{{ basics.name }} - Resume</title>
 <style>
   :root {
     --ink: #1a1d23;
@@ -189,7 +189,7 @@
         <div class="entry-head">
           <div>
             <span class="entry-title">{{ job.title }}</span>
-            <span class="entry-org"> — {{ job.company }}</span>
+            <span class="entry-org"> - {{ job.company }}</span>
             <div class="entry-sub">{{ job.location }}</div>
           </div>
           <div class="entry-dates">{{ job.start }} – {{ job.end }}</div>
@@ -224,7 +224,7 @@
       <h2>Certifications</h2>
       <ul class="bullets" style="padding-left: 0; list-style: none;">
         {% for c in certifications %}
-        <li>{{ c.name }}{% if c.issuer %} <span class="entry-sub" style="display:inline;">— {{ c.issuer }}</span>{% endif %}</li>
+        <li>{{ c.name }}{% if c.issuer %} <span class="entry-sub" style="display:inline;">- {{ c.issuer }}</span>{% endif %}</li>
         {% endfor %}
       </ul>
     </section>
@@ -246,7 +246,7 @@
       {% for p in projects %}
       <div class="project">
         <span class="project-name">{{ p.name }}</span>
-        {% if p.link %} — <a class="project-link" href="https://{{ p.link }}">{{ p.link }}</a>{% endif %}
+        {% if p.link %} - <a class="project-link" href="https://{{ p.link }}">{{ p.link }}</a>{% endif %}
         <div class="entry-sub">{{ p.description }}</div>
       </div>
       {% endfor %}

@@ -72,20 +72,22 @@ republish.
    cd resume
    python3 -m venv venv && source venv/bin/activate
    pip install -r requirements.txt
-   python build.py   # sanity-check it builds before wiring up the service
+   playwright install chromium   # downloads the browser binary, no root needed
    exit   # back to your own sudo-capable user
    ```
 
 4. **Playwright's OS-level dependencies (root, one-time only)** — the
    `deploy` user's sudo is scoped to just `systemctl restart`, so it *can't*
    run `apt-get install` itself. Install the shared libraries Chromium needs
-   once, as yourself:
+   once, as yourself, then sanity-check the full build as the `deploy` user:
    ```bash
    sudo /opt/apps/resume/venv/bin/playwright install-deps chromium
+   sudo -iu deploy bash -c 'cd /opt/apps/resume && source venv/bin/activate && python build.py'
    ```
-   Routine deploys only run `playwright install chromium` (just downloads
-   the browser binary into the `deploy` user's own cache — no root needed),
-   which is already in `.github/workflows/deploy.yml`.
+   Confirm all three files landed: `ls -la /opt/apps/resume/site/`. Routine
+   deploys only re-run `playwright install chromium` (cache hit, no root
+   needed) before `python build.py`, already in
+   `.github/workflows/deploy.yml`.
 
 5. **systemd unit**:
    ```bash

@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
 """
-Single build step: resume.yaml -> site/index.html, site/resume.pdf, site/resume.docx.
+Single build step: resume.yaml -> two parallel trees, each with an
+index.html, resume.pdf, and resume.docx:
+
+    site/private/   full data, including contact info
+    site/public/    email/phone/location stripped out at build time
 
     python build.py
+
+app/main.py decides which tree to serve per-request based on whether a
+valid ?code=... access code was given (see app/crud.py) -- this script only
+ever produces pre-built static files, no PDF/DOCX generation happens
+per-request.
 
 The HTML page is the actual design; the PDF is that same page printed by a
 headless browser (so it's always visually in sync with the web version with
@@ -10,6 +19,7 @@ zero extra styling work). The DOCX is generated separately with python-docx
 since Word can't just render CSS -- it's styled to look clean, not to be a
 pixel copy of the HTML.
 """
+import copy
 import sys
 from pathlib import Path
 
@@ -24,10 +34,21 @@ from docx.oxml import OxmlElement
 ROOT = Path(__file__).parent
 SITE = ROOT / "site"
 
+REDACTED_BASICS_FIELDS = ("email", "phone", "location")
+
 
 def load_data():
     with open(ROOT / "resume.yaml") as f:
         return yaml.safe_load(f)
+
+
+def redact(data):
+    """Deep-copy data with contact fields stripped from basics, for the
+    public/ tree that's served without a valid access code."""
+    redacted = copy.deepcopy(data)
+    for field in REDACTED_BASICS_FIELDS:
+        redacted["basics"].pop(field, None)
+    return redacted
 
 
 def render_html(data, *, show_download_bar):
@@ -36,24 +57,24 @@ def render_html(data, *, show_download_bar):
     return template.render(show_download_bar=show_download_bar, **data)
 
 
-def build_html(data):
+def build_html(data, out_dir):
     html = render_html(data, show_download_bar=True)
-    out = SITE / "index.html"
+    out = out_dir / "index.html"
     out.write_text(html)
     print(f"wrote {out}")
 
 
-def build_pdf(data):
+def build_pdf(data, out_dir):
     # Render without the download bar -- it's a page-only UI element.
     html = render_html(data, show_download_bar=False)
-    tmp = SITE / "_pdf_render.html"
+    tmp = out_dir / "_pdf_render.html"
     tmp.write_text(html)
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = browser.new_page()
             page.goto(tmp.as_uri())
-            out = SITE / "resume.pdf"
+            out = out_dir / "resume.pdf"
             page.pdf(
                 path=str(out),
                 format="Letter",
@@ -72,7 +93,7 @@ MUTED = (0x5B, 0x62, 0x70)
 INK = (0x1A, 0x1D, 0x23)
 
 
-def build_docx(data):
+def build_docx(data, out_dir):
     basics = data["basics"]
     doc = Document()
 
@@ -143,7 +164,7 @@ def build_docx(data):
                 _run(p, f" - {proj['link']}", size=9.5, color=MUTED)
             _run(doc.add_paragraph(), proj.get("description", ""), size=10, color=INK)
 
-    out = SITE / "resume.docx"
+    out = out_dir / "resume.docx"
     doc.save(out)
     print(f"wrote {out}")
 
@@ -174,12 +195,17 @@ def _run(paragraph, text, *, bold=False, size=10.5, color=None):
     return run
 
 
+def build_tree(data, out_dir):
+    out_dir.mkdir(parents=True, exist_ok=True)
+    build_html(data, out_dir)
+    build_pdf(data, out_dir)
+    build_docx(data, out_dir)
+
+
 def main():
-    SITE.mkdir(exist_ok=True)
     data = load_data()
-    build_html(data)
-    build_pdf(data)
-    build_docx(data)
+    build_tree(data, SITE / "private")
+    build_tree(redact(data), SITE / "public")
 
 
 if __name__ == "__main__":

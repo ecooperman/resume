@@ -24,5 +24,7 @@ jobs:
             # OS-level shared libs (`playwright install-deps`) are a one-time
             # setup step run by hand with real sudo, see README.md.
             playwright install chromium
+            alembic upgrade head
             python build.py
             sudo systemctl restart resume
+            sudo systemctl restart resume-admin

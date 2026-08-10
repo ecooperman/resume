@@ -162,6 +162,20 @@
     <a href="/resume.pdf" download>Download PDF</a>
     <a href="/resume.docx" download>Download DOCX</a>
   </div>
+  <script>
+    // Carry ?code=... through to the download links so an unlocked page
+    // downloads the unlocked files too. No-op if there's no code -- the
+    // server independently re-validates every download request regardless.
+    (function () {
+      var code = new URLSearchParams(window.location.search).get("code");
+      if (!code) return;
+      document.querySelectorAll(".download-bar a").forEach(function (a) {
+        var url = new URL(a.href, window.location.origin);
+        url.searchParams.set("code", code);
+        a.href = url.toString();
+      });
+    })();
+  </script>
   {% endif %}
   <div class="page">
     <header class="hero">
@@ -170,8 +184,11 @@
         <p class="role">{{ basics.title }}</p>
       </div>
       <div class="contact">
-        {{ basics.location }}<br>
-        <a href="mailto:{{ basics.email }}">{{ basics.email }}</a> · {{ basics.phone }}<br>
+        {% if basics.location %}{{ basics.location }}<br>{% endif %}
+        {%- if basics.email %}<a href="mailto:{{ basics.email }}">{{ basics.email }}</a>{% endif -%}
+        {%- if basics.email and basics.phone %} · {% endif -%}
+        {%- if basics.phone %}{{ basics.phone }}{% endif -%}
+        {% if basics.email or basics.phone %}<br>{% endif %}
         {% if basics.website %}<a href="https://{{ basics.website }}">{{ basics.website }}</a>{% endif %}
         {% if basics.linkedin %} · <a href="https://{{ basics.linkedin }}">{{ basics.linkedin }}</a>{% endif %}
         {% if basics.github %} · <a href="https://{{ basics.github }}">{{ basics.github }}</a>{% endif %}

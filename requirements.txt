@@ -4,3 +4,5 @@ jinja2
 pyyaml
 playwright
 python-docx
+sqlalchemy
+alembic==1.16.5

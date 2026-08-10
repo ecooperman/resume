@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resume Access Codes — Admin</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="admin-app">
+    <h1>Resume access codes</h1>
+    <p class="hint">
+      A code unlocks the full resume (contact info + real downloads) at
+      <a href="https://resume.evancooperman.com" target="_blank" rel="noopener">resume.evancooperman.com</a>.
+      Without one, visitors see the redacted public version.
+    </p>
+
+    <div id="message" class="message hidden"></div>
+
+    <form id="create-form">
+      <input type="text" id="label" placeholder="Label, e.g. &quot;Acme Corp recruiter&quot;">
+      <input type="number" id="days" placeholder="Expires in N days (blank = never)" min="1">
+      <button type="submit">Generate code</button>
+    </form>
+
+    <table id="codes-table">
+      <thead>
+        <tr>
+          <th>Label</th>
+          <th>Status</th>
+          <th>Uses</th>
+          <th>Last used</th>
+          <th>Expires</th>
+          <th>Link</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="codes-body"></tbody>
+    </table>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

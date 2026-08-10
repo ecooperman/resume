@@ -42,7 +42,7 @@ Then open http://localhost:8040.
 
 Follows the same pattern as the other apps in this directory — see
 `../DEPLOYMENT.md`. Port `8040`, service name `resume`, hostname
-`www.evancooperman.com` (left behind the existing wildcard Cloudflare Access
+`resume.evancooperman.com` (left behind the existing wildcard Cloudflare Access
 gate for now, not public). `deploy/resume.service` and
 `.github/workflows/deploy.yml` are already set up; the deploy step runs
 `build.py` itself so pushing an updated `resume.yaml` is all it takes to
@@ -112,26 +112,26 @@ republish.
 6. **cloudflared ingress** — add to `/etc/cloudflared/config.yml`, *above*
    the catch-all `- service: http_status:404` line:
    ```yaml
-     - hostname: www.evancooperman.com
+     - hostname: resume.evancooperman.com
        service: http://localhost:8040
    ```
-   If `www.evancooperman.com` doesn't already have a DNS record pointing
+   If `resume.evancooperman.com` doesn't already have a DNS record pointing
    somewhere else, route it and restart:
    ```bash
-   sudo cloudflared tunnel route dns home-apps www.evancooperman.com
+   sudo cloudflared tunnel route dns home-apps resume.evancooperman.com
    sudo systemctl restart cloudflared
    ```
-   If a `www` record already exists (e.g. pointing at something else), you'll
-   need to update/replace that record in the Cloudflare dashboard instead of
-   using `route dns`.
+   If a `resume` record already exists (e.g. pointing at something else),
+   you'll need to update/replace that record in the Cloudflare dashboard
+   instead of using `route dns`.
 
 7. **Access** — nothing to do. The existing wildcard Access application
-   (`*.evancooperman.com`) already covers `www`, so this stays behind the
+   (`*.evancooperman.com`) already covers `resume`, so this stays behind the
    same email + one-time-PIN login as your other apps, per "leave it locked
    down for now."
 
 8. **Cache Rule (bypass)** — Caching → Cache Rules → add
-   `www.evancooperman.com` to the existing bypass rule (or create one), so a
+   `resume.evancooperman.com` to the existing bypass rule (or create one), so a
    `resume.yaml` update actually shows up without a manual "Purge Everything"
    after each deploy.
 

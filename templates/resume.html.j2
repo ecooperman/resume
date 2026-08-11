@@ -27,13 +27,15 @@
     padding: 56px 64px 72px;
   }
   header.hero {
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 18px;
+    margin-bottom: 22px;
+  }
+  .hero-top {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
     gap: 24px;
-    border-bottom: 2px solid var(--ink);
-    padding-bottom: 18px;
-    margin-bottom: 22px;
   }
   h1 {
     font-size: 30px;
@@ -52,10 +54,31 @@
     font-size: 12.5px;
     color: var(--muted);
     line-height: 1.7;
-    white-space: nowrap;
   }
   .contact a { color: var(--muted); text-decoration: none; }
   .contact a:hover { color: var(--accent); }
+
+  .links-row {
+    display: flex;
+    justify-content: center;
+    gap: 28px;
+    margin-top: 22px;
+  }
+  .link-item { text-align: left; }
+  .link-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+  .link-item a {
+    font-size: 12.5px;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .link-item a:hover { color: var(--accent); }
 
   .summary {
     font-size: 14px;
@@ -124,7 +147,7 @@
 
   .download-bar {
     max-width: 760px;
-    margin: 24px auto 0;
+    margin: 24px auto 20px;
     display: flex;
     gap: 10px;
     justify-content: flex-end;
@@ -144,8 +167,9 @@
 
   @media (max-width: 700px) {
     .page { padding: 32px 24px 48px; }
-    header.hero { flex-direction: column; align-items: flex-start; }
+    .hero-top { flex-direction: column; align-items: flex-start; }
     .contact { text-align: left; }
+    .links-row { flex-direction: column; align-items: flex-start; gap: 10px; margin-top: 12px; }
     .download-bar { flex-direction: column; padding: 0 24px; }
   }
 
@@ -179,20 +203,40 @@
   {% endif %}
   <div class="page">
     <header class="hero">
-      <div>
-        <h1>{{ basics.name }}</h1>
-        <p class="role">{{ basics.title }}</p>
+      <div class="hero-top">
+        <div>
+          <h1>{{ basics.name }}</h1>
+          <p class="role">{{ basics.title }}</p>
+        </div>
+        <div class="contact">
+          {% if basics.location %}{{ basics.location }}<br>{% endif %}
+          {%- if basics.email %}<a href="mailto:{{ basics.email }}">{{ basics.email }}</a>{% endif -%}
+          {%- if basics.email and basics.phone %} · {% endif -%}
+          {%- if basics.phone %}{{ basics.phone }}{% endif -%}
+        </div>
       </div>
-      <div class="contact">
-        {% if basics.location %}{{ basics.location }}<br>{% endif %}
-        {%- if basics.email %}<a href="mailto:{{ basics.email }}">{{ basics.email }}</a>{% endif -%}
-        {%- if basics.email and basics.phone %} · {% endif -%}
-        {%- if basics.phone %}{{ basics.phone }}{% endif -%}
-        {% if basics.email or basics.phone %}<br>{% endif %}
-        {% if basics.website %}<a href="https://{{ basics.website }}">{{ basics.website }}</a>{% endif %}
-        {% if basics.linkedin %} · <a href="https://{{ basics.linkedin }}">{{ basics.linkedin }}</a>{% endif %}
-        {% if basics.github %} · <a href="https://{{ basics.github }}">{{ basics.github }}</a>{% endif %}
+      {% if basics.website or basics.linkedin or basics.github %}
+      <div class="links-row">
+        {% if basics.website %}
+        <div class="link-item">
+          <div class="link-label">Website</div>
+          <a href="https://{{ basics.website }}">{{ basics.website }}</a>
+        </div>
+        {% endif %}
+        {% if basics.linkedin %}
+        <div class="link-item">
+          <div class="link-label">LinkedIn</div>
+          <a href="https://{{ basics.linkedin }}">{{ basics.linkedin }}</a>
+        </div>
+        {% endif %}
+        {% if basics.github %}
+        <div class="link-item">
+          <div class="link-label">GitHub</div>
+          <a href="https://{{ basics.github }}">{{ basics.github }}</a>
+        </div>
+        {% endif %}
       </div>
+      {% endif %}
     </header>
 
     {% if basics.summary %}

@@ -5,6 +5,12 @@ After=network.target
 [Service]
 User=deploy
 WorkingDirectory=/opt/apps/resume
+# INTERNAL_API_TOKEN gates the /api/resume-data and /api/render endpoints
+# time-management's resume-generation feature calls - set the real value
+# here directly on the droplet (never commit it): sudo systemctl edit
+# resume-admin, or edit this file in place after copying it in. Must match
+# the value set on time-management.service.
+Environment=INTERNAL_API_TOKEN=
 ExecStart=/opt/apps/resume/venv/bin/uvicorn app.admin:app --host 127.0.0.1 --port 8041
 Restart=on-failure
 RestartSec=3

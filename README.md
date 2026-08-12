@@ -10,6 +10,7 @@ resume.yaml              <- edit this, everything else is derived
 templates/resume.html.j2 <- the design (HTML/CSS)
 build.py                 <- resume.yaml -> site/{public,private}/{index.html,resume.pdf,resume.docx}
 app/
+  render.py                <- the actual rendering pipeline (build.py and app/admin.py both use it)
   main.py                 <- public resume app (port 8040): serves public/ or private/ per ?code=...
   admin.py                 <- admin API (port 8041, separate process - see "Access codes" below)
   models.py, crud.py      <- the access_codes table (SQLAlchemy)
@@ -76,6 +77,30 @@ python manage.py revoke <code-or-id>
 
 Revoking (either way) is immediate - the next request with that code falls
 back to the public/redacted version, same as an invalid or expired one.
+
+## Internal API (for time-management's resume generation)
+
+`app/admin.py` exposes two extra endpoints, purely for the `time-management`
+app's "Generate Resume" feature - not meant for browser use, and not part of
+the access-code system above:
+
+- `GET /api/resume-data` - the current `resume.yaml`, as JSON.
+- `POST /api/render` - `{"data": {...resume-shaped dict...}, "format":
+  "pdf"|"docx"}` -> renders it via the same pipeline as `build.py`
+  (`app/render.py`), into a throwaway temp directory that never touches
+  `site/` or `resume.yaml` - returns the file bytes. Used to turn a
+  *tailored* resume (someone else's data shaped like `resume.yaml`, not
+  necessarily this one) into a real PDF/DOCX.
+
+Both require an `X-Internal-Token` header matching the `INTERNAL_API_TOKEN`
+environment variable. Neither is reachable through Cloudflare (this port has
+no tunnel route - see "Access" below), so the token is defense in depth
+against another process on the same droplet, not the primary access control.
+**Must be set to the exact same value as `INTERNAL_API_TOKEN` on the
+`time-management` app** - see that app's README. Locally, export it in your
+shell before running `uvicorn app.admin:app`; on the droplet, set it in
+`/etc/systemd/system/resume-admin.service` (never commit the real value -
+see `deploy/resume-admin.service` for the placeholder line).
 
 ## Local setup
 
@@ -160,7 +185,9 @@ for the second service.
    `playwright install chromium` (cache hit, no root needed) before
    `python build.py`, already in `.github/workflows/deploy.yml`.
 
-5. **systemd units**:
+5. **systemd units** - set the real `INTERNAL_API_TOKEN` value in
+   `resume-admin.service` before installing it (matching whatever you set on
+   `time-management.service` - see that repo's one-time setup), then:
    ```bash
    sudo cp /opt/apps/resume/deploy/resume.service /etc/systemd/system/
    sudo cp /opt/apps/resume/deploy/resume-admin.service /etc/systemd/system/

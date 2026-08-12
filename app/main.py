@@ -43,10 +43,21 @@ def _resolve_dir(code: Optional[str], db: Session) -> Path:
     return PUBLIC_DIR
 
 
+# Every route here is code-gated per request (see _resolve_dir) - nothing
+# from these routes should ever be cacheable by Cloudflare's edge or a
+# browser. Without an explicit Cache-Control, Cloudflare falls back to its
+# own default caching for static-looking extensions like .pdf/.docx (HTML
+# isn't cached by default, which is why a stale-download report with an
+# already-fresh page is the telltale symptom) - and a cached private
+# response would keep being served after a code is revoked, since the
+# CDN never re-asks the origin/DB during the cache window.
+NO_CACHE_HEADERS = {"Cache-Control": "private, no-store"}
+
+
 @app.get("/")
 def index(code: Optional[str] = None, db: Session = Depends(get_db)):
     directory = _resolve_dir(code, db)
-    return FileResponse(directory / "index.html")
+    return FileResponse(directory / "index.html", headers=NO_CACHE_HEADERS)
 
 
 @app.get("/resume.pdf")
@@ -56,6 +67,7 @@ def resume_pdf(code: Optional[str] = None, db: Session = Depends(get_db)):
         directory / "resume.pdf",
         media_type="application/pdf",
         filename="Evan_Cooperman_Resume.pdf",
+        headers=NO_CACHE_HEADERS,
     )
 
 
@@ -66,4 +78,5 @@ def resume_docx(code: Optional[str] = None, db: Session = Depends(get_db)):
         directory / "resume.docx",
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename="Evan_Cooperman_Resume.docx",
+        headers=NO_CACHE_HEADERS,
     )

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Single build step: resume.yaml -> two parallel trees, each with an
+Single build step: the default person's resume (see app/models.Person,
+app/crud.get_default_person) -> two parallel trees, each with an
 index.html, resume.pdf, and resume.docx:
 
     site/private/   full data, including contact info
@@ -19,16 +20,20 @@ zero extra styling work). The DOCX is generated separately with python-docx
 since Word can't just render CSS -- it's styled to look clean, not to be a
 pixel copy of the HTML.
 
-The actual rendering functions (render_html/build_pdf/build_docx/load_data)
-live in app/render.py, not here -- app/admin.py's /api/render endpoint reuses
-them too, to turn a *tailored* resume (from the time-management app) into
+The actual rendering functions (render_html/build_pdf/build_docx) live in
+app/render.py, not here -- app/admin.py's /api/render endpoint reuses them
+too, to turn a *tailored* resume (from the time-management app) into
 PDF/DOCX bytes without touching this file or site/ at all.
 """
 import copy
 import sys
 from pathlib import Path
 
-from app.render import build_docx, build_pdf, load_data, render_html
+import yaml
+
+from app.crud import get_default_person
+from app.database import SessionLocal
+from app.render import build_docx, build_pdf, render_html
 
 ROOT = Path(__file__).parent
 SITE = ROOT / "site"
@@ -60,7 +65,17 @@ def build_tree(data, out_dir):
 
 
 def main():
-    data = load_data()
+    db = SessionLocal()
+    try:
+        person = get_default_person(db)
+        if person is None:
+            raise SystemExit(
+                "error: no default person is set up yet - create one via the admin "
+                "UI (People) first, or the seed script for a first-time bootstrap."
+            )
+        data = yaml.safe_load(person.resume_yaml)
+    finally:
+        db.close()
     build_tree(data, SITE / "private")
     build_tree(redact(data), SITE / "public")
 

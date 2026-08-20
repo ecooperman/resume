@@ -16,6 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional
 
+import yaml
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
@@ -49,20 +50,33 @@ class RenderRequest(BaseModel):
     format: Literal["pdf", "docx"]
 
 
+@app.get("/api/resume-people", dependencies=[Depends(require_internal_token)])
+def list_resume_people(db: Session = Depends(get_db)):
+    """Every person available to tailor from - source list for the
+    time-management app's per-person resume dropdown (see People in its
+    Settings page)."""
+    return {"people": [{"slug": p.slug, "name": p.name, "is_default": p.is_default} for p in crud.list_people(db)]}
+
+
 @app.get("/api/resume-data", dependencies=[Depends(require_internal_token)])
-def get_resume_data():
-    """The current resume.yaml, as JSON - source data for tailoring a resume
-    to a specific job elsewhere. Read fresh from disk on every call, so it's
-    always in sync with whatever's actually in resume.yaml right now."""
-    return render.load_data()
+def get_resume_data(person: Optional[str] = None, db: Session = Depends(get_db)):
+    """The given person's resume data (by slug), or the default person's if
+    person is omitted, as JSON - source data for tailoring a resume to a
+    specific job elsewhere. Read fresh from the DB on every call, so an
+    edit made through the People admin UI is always picked up immediately."""
+    row = crud.get_person_by_slug(db, person) if person else crud.get_default_person(db)
+    if row is None:
+        detail = f"No such person: {person!r}" if person else "No default person is configured yet"
+        raise HTTPException(status_code=404, detail=detail)
+    return yaml.safe_load(row.resume_yaml)
 
 
 @app.post("/api/render", dependencies=[Depends(require_internal_token)])
 def render_document(body: RenderRequest):
     """Render arbitrary resume-shaped data (e.g. a job-tailored variant, not
-    necessarily this repo's own resume.yaml) into a PDF or DOCX. Always
+    necessarily this repo's own evan-resume.yaml) into a PDF or DOCX. Always
     writes into a throwaway temp directory - this never touches site/ or
-    resume.yaml, so it can't affect the real resume site."""
+    any resume yaml file, so it can't affect the real resume site."""
     with tempfile.TemporaryDirectory() as tmp:
         out_dir = Path(tmp)
         try:
@@ -80,6 +94,90 @@ def render_document(body: RenderRequest):
             # plain KeyError, rather than an operational failure.
             raise HTTPException(status_code=400, detail=f"Could not render resume data: {e}")
         return Response(content=out_path.read_bytes(), media_type=media_type)
+
+
+# --- People: browser-facing CRUD for the admin UI (admin_static/), gated
+# only by the Cloudflare Access already covering this hostname - same
+# pattern as the access-code endpoints below, no internal token involved.
+# This is the only place resume content is ever created or edited; there is
+# deliberately no file/upload-to-disk path anywhere in this app any more.
+
+
+class PersonCreateRequest(BaseModel):
+    slug: str
+    name: str
+    resume_yaml: str
+    is_default: bool = False
+
+
+class PersonUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    resume_yaml: Optional[str] = None
+    is_default: Optional[bool] = None
+
+
+class PersonOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    slug: str
+    name: str
+    is_default: bool
+    created_at: datetime
+    updated_at: datetime
+    # resume_yaml deliberately left out of the list shape - could be a few
+    # KB per person; fetched separately (PersonDetailOut) only when actually
+    # editing one.
+
+
+class PersonDetailOut(PersonOut):
+    resume_yaml: str
+
+
+@app.get("/api/people", response_model=list[PersonOut])
+def list_people_route(db: Session = Depends(get_db)):
+    return crud.list_people(db)
+
+
+@app.get("/api/people/{person_id}", response_model=PersonDetailOut)
+def get_person_route(person_id: int, db: Session = Depends(get_db)):
+    person = crud.get_person(db, person_id)
+    if person is None:
+        raise HTTPException(status_code=404, detail="Person not found")
+    return person
+
+
+@app.post("/api/people", response_model=PersonDetailOut)
+def create_person_route(body: PersonCreateRequest, db: Session = Depends(get_db)):
+    try:
+        return crud.create_person(db, body.slug, body.name, body.resume_yaml, body.is_default)
+    except crud.PersonError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.patch("/api/people/{person_id}", response_model=PersonDetailOut)
+def update_person_route(person_id: int, body: PersonUpdateRequest, db: Session = Depends(get_db)):
+    try:
+        person = crud.update_person(
+            db, person_id, name=body.name, resume_yaml=body.resume_yaml, is_default=body.is_default
+        )
+    except crud.PersonError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if person is None:
+        raise HTTPException(status_code=404, detail="Person not found")
+    return person
+
+
+@app.delete("/api/people/{person_id}")
+def delete_person_route(person_id: int, db: Session = Depends(get_db)):
+    result = crud.delete_person(db, person_id)
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="Person not found")
+    if result == "is_default":
+        raise HTTPException(
+            status_code=409, detail="Can't delete the default person - make someone else default first"
+        )
+    return {"ok": True}
 
 
 class CreateCodeRequest(BaseModel):

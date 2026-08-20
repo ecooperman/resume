@@ -119,3 +119,94 @@ td.empty { color: var(--muted); text-align: center; padding: 28px; }
 .revoke-btn:hover { border-color: var(--danger); background: #fbeaea; }
 
 tr.status-revoked td { color: var(--muted); }
+
+h2 {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+hr {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 32px 0;
+}
+
+#people-list { margin-bottom: 20px; }
+.person-row {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.person-row.is-default { box-shadow: 0 0 0 2px var(--accent); }
+.person-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.person-name { font-size: 13.5px; font-weight: 600; }
+.person-slug { font-size: 12.5px; color: var(--muted); }
+.person-actions { margin-left: auto; display: flex; gap: 8px; }
+.person-actions button {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--rule);
+  background: #fff;
+  cursor: pointer;
+}
+.person-actions button:hover { border-color: var(--accent); color: var(--accent); }
+.person-edit { margin-top: 12px; }
+.person-edit.hidden { display: none; }
+.person-edit textarea {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  padding: 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.person-edit .save-btn {
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+#add-person-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+#add-person-form input, #add-person-form textarea {
+  font-size: 13.5px;
+  padding: 9px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font-family: inherit;
+}
+#add-person-form textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+}
+#add-person-form label { font-size: 13px; color: var(--muted); }
+#add-person-form button {
+  align-self: flex-start;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}

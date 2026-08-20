@@ -6,14 +6,13 @@ access code. Codes are managed through a small admin panel on its own
 hostname/port, or via a CLI.
 
 ```
-resume.yaml              <- edit this, everything else is derived
 templates/resume.html.j2 <- the design (HTML/CSS)
-build.py                 <- resume.yaml -> site/{public,private}/{index.html,resume.pdf,resume.docx}
+build.py                 <- default person's resume data -> site/{public,private}/{index.html,resume.pdf,resume.docx}
 app/
   render.py                <- the actual rendering pipeline (build.py and app/admin.py both use it)
   main.py                 <- public resume app (port 8040): serves public/ or private/ per ?code=...
   admin.py                 <- admin API (port 8041, separate process - see "Access codes" below)
-  models.py, crud.py      <- the access_codes table (SQLAlchemy)
+  models.py, crud.py      <- access_codes + people tables (SQLAlchemy) - see "People" below
 admin_static/              <- no-build-step admin frontend (served by app/admin.py)
 manage.py                 <- CLI alternative to the admin panel
 migrations/                <- Alembic, same pattern as the other apps here
@@ -21,7 +20,8 @@ migrations/                <- Alembic, same pattern as the other apps here
 
 ## Editing your resume
 
-Edit `resume.yaml`, then:
+Edit it through the admin page's People section (not a file - see "People"
+below for why), then regenerate the public site:
 
 ```bash
 python build.py
@@ -78,23 +78,54 @@ python manage.py revoke <code-or-id>
 Revoking (either way) is immediate - the next request with that code falls
 back to the public/redacted version, same as an invalid or expired one.
 
+## People (resume storage)
+
+Every resume - including the default one this site itself renders - is a
+row in this app's own `access.db` (`app/models.Person`: `slug`, `name`,
+`resume_yaml`, `is_default`), managed entirely through the "People" section
+of the admin page (same hostname/port as the access-code admin below,
+gated the same way - Cloudflare Access on this hostname, nothing else).
+There is deliberately no file-based resume storage anywhere in this repo
+any more - `evan-resume.yaml`/`rach-resume.yaml` were the old approach,
+replaced because this repo is public on GitHub (a committed resume file's
+raw contact info would be scrapable, bypassing the access-code redaction
+below entirely) and because editing a file needed `scp`/SSH access, not
+just a browser. Exactly one person has `is_default=True` at a time - that's
+who `build.py` (this section's public site) and a bare `/api/resume-data`
+call (no `?person=`) resolve to.
+
+First-time bootstrap from an existing file (not needed for ongoing edits -
+those go through the People UI):
+
+```bash
+python manage.py seed-person --slug evan --name "Evan Cooperman" --file evan-resume.yaml --default
+```
+
 ## Internal API (for time-management's resume generation)
 
-`app/admin.py` exposes two extra endpoints, purely for the `time-management`
-app's "Generate Resume" feature - not meant for browser use, and not part of
-the access-code system above:
+`app/admin.py` exposes three extra endpoints, purely for the
+`time-management` app's "Generate Resume" feature - not meant for browser
+use, and not part of the access-code system above:
 
-- `GET /api/resume-data` - the current `resume.yaml`, as JSON.
+- `GET /api/resume-people` - every person available to tailor from, as
+  `{slug, name, is_default}` - source list for time-management's per-person
+  "Resume" dropdown (People, in its Settings page), so a household member
+  other than the default person can generate from their own resume (e.g.
+  slug `"rach"`) instead.
+- `GET /api/resume-data?person=<slug>` - the given person's resume data (by
+  slug - defaults to whoever `is_default=True` is if `person` is omitted),
+  as JSON. 404s on an unknown slug.
 - `POST /api/render` - `{"data": {...resume-shaped dict...}, "format":
   "pdf"|"docx"}` -> renders it via the same pipeline as `build.py`
   (`app/render.py`), into a throwaway temp directory that never touches
-  `site/` or `resume.yaml` - returns the file bytes. Used to turn a
-  *tailored* resume (someone else's data shaped like `resume.yaml`, not
+  `site/` or the `people` table - returns the file bytes. Used to turn a
+  *tailored* resume (someone else's data shaped like a resume yaml file, not
   necessarily this one) into a real PDF/DOCX.
 
-Both require an `X-Internal-Token` header matching the `INTERNAL_API_TOKEN`
-environment variable. Neither is reachable through Cloudflare (this port has
-no tunnel route - see "Access" below), so the token is defense in depth
+All three require an `X-Internal-Token` header matching the
+`INTERNAL_API_TOKEN` environment variable. None are reachable through
+Cloudflare (this port has no tunnel route - see "Access" below), so the
+token is defense in depth
 against another process on the same droplet, not the primary access control.
 **Must be set to the exact same value as `INTERNAL_API_TOKEN` on the
 `time-management` app** - see that app's README. Locally, export it in your

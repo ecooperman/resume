@@ -1,16 +1,19 @@
 """
-The actual rendering pipeline: resume.yaml-shaped data -> HTML / PDF / DOCX.
+The actual rendering pipeline: resume-yaml-shaped data -> HTML / PDF / DOCX.
 
 Split out of build.py (which is still the only thing that writes to
 site/ - it just imports these functions now) so that app/admin.py can also
 reach them, for rendering *tailored* resumes (from the time-management app's
-resume-generation feature) into ad-hoc PDF/DOCX bytes without touching this
-repo's own resume.yaml or site/ output at all. See app/admin.py's
-/api/render endpoint.
+resume-generation feature) into ad-hoc PDF/DOCX bytes without touching
+site/ output at all. See app/admin.py's /api/render endpoint.
+
+Every real person's resume content lives in the `people` table (models.Person)
+- never a file, never in git (see app/crud.py). This module only ever
+receives already-loaded data as a plain dict; it doesn't know or care where
+that dict came from.
 """
 from pathlib import Path
 
-import yaml
 from jinja2 import Environment, FileSystemLoader
 from playwright.sync_api import sync_playwright
 from docx import Document
@@ -20,11 +23,6 @@ from docx.oxml import OxmlElement
 
 ROOT = Path(__file__).resolve().parent.parent  # repo root, one level above app/
 TEMPLATES_DIR = ROOT / "templates"
-
-
-def load_data():
-    with open(ROOT / "resume.yaml") as f:
-        return yaml.safe_load(f)
 
 
 def render_html(data, *, show_download_bar):

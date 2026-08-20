@@ -82,6 +82,155 @@ function codeRow(c) {
   return tr;
 }
 
+function personRow(p) {
+  const div = document.createElement("div");
+  div.className = "person-row" + (p.is_default ? " is-default" : "");
+
+  const summary = document.createElement("div");
+  summary.className = "person-summary";
+  summary.innerHTML = `
+    <span class="person-name">${escapeHtml(p.name)}</span>
+    <span class="person-slug">(${escapeHtml(p.slug)})</span>
+    ${p.is_default ? '<span class="badge badge-active">default</span>' : ""}
+  `;
+
+  const actions = document.createElement("div");
+  actions.className = "person-actions";
+
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.textContent = "Edit";
+  actions.appendChild(editBtn);
+
+  if (!p.is_default) {
+    const defaultBtn = document.createElement("button");
+    defaultBtn.type = "button";
+    defaultBtn.textContent = "Make default";
+    defaultBtn.addEventListener("click", async () => {
+      try {
+        await fetchJSON(`/api/people/${p.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_default: true }),
+        });
+        showMessage(`"${p.name}" is now the default.`, "success");
+        loadPeople();
+      } catch (e) {
+        showMessage(e.message, "error");
+      }
+    });
+    actions.appendChild(defaultBtn);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "revoke-btn";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm(`Delete "${p.name}"? This can't be undone.`)) return;
+      try {
+        await fetchJSON(`/api/people/${p.id}`, { method: "DELETE" });
+        showMessage(`Deleted "${p.name}".`, "success");
+        loadPeople();
+      } catch (e) {
+        showMessage(e.message, "error");
+      }
+    });
+    actions.appendChild(deleteBtn);
+  }
+
+  summary.appendChild(actions);
+  div.appendChild(summary);
+
+  // Edit form starts hidden - fetching full content (which can be a few KB)
+  // only happens the first time Edit is actually clicked, not on every
+  // page load for every person.
+  const editForm = document.createElement("div");
+  editForm.className = "person-edit hidden";
+  div.appendChild(editForm);
+
+  let loaded = false;
+  editBtn.addEventListener("click", async () => {
+    const isHidden = editForm.classList.contains("hidden");
+    if (!isHidden) {
+      editForm.classList.add("hidden");
+      editBtn.textContent = "Edit";
+      return;
+    }
+    if (!loaded) {
+      try {
+        const full = await fetchJSON(`/api/people/${p.id}`);
+        editForm.innerHTML = `
+          <textarea class="person-yaml-edit" rows="14">${escapeHtml(full.resume_yaml)}</textarea>
+          <button type="button" class="save-btn">Save</button>
+        `;
+        editForm.querySelector(".save-btn").addEventListener("click", async () => {
+          try {
+            await fetchJSON(`/api/people/${p.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ resume_yaml: editForm.querySelector(".person-yaml-edit").value }),
+            });
+            showMessage(`Saved "${p.name}".`, "success");
+          } catch (e) {
+            showMessage(e.message, "error");
+          }
+        });
+        loaded = true;
+      } catch (e) {
+        showMessage(e.message, "error");
+        return;
+      }
+    }
+    editForm.classList.remove("hidden");
+    editBtn.textContent = "Close";
+  });
+
+  return div;
+}
+
+async function loadPeople() {
+  const people = await fetchJSON("/api/people");
+  const container = document.getElementById("people-list");
+  container.innerHTML = "";
+  if (people.length === 0) {
+    container.innerHTML = `<p class="empty">No one set up yet - add someone below.</p>`;
+    return;
+  }
+  for (const p of people) {
+    container.appendChild(personRow(p));
+  }
+}
+
+document.getElementById("add-person-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const nameInput = document.getElementById("person-name");
+  const slugInput = document.getElementById("person-slug");
+  const yamlInput = document.getElementById("person-yaml");
+  const defaultInput = document.getElementById("person-default");
+  try {
+    const p = await fetchJSON("/api/people", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: nameInput.value,
+        slug: slugInput.value,
+        resume_yaml: yamlInput.value,
+        is_default: defaultInput.checked,
+      }),
+    });
+    nameInput.value = "";
+    slugInput.value = "";
+    yamlInput.value = "";
+    defaultInput.checked = false;
+    showMessage(`Added "${p.name}".`, "success");
+    loadPeople();
+  } catch (err) {
+    showMessage(err.message, "error");
+  }
+});
+
+loadPeople();
+
 async function loadCodes() {
   const codes = await fetchJSON("/api/codes");
   const tbody = document.getElementById("codes-body");

@@ -50,6 +50,12 @@ class RenderRequest(BaseModel):
     format: Literal["pdf", "docx"]
 
 
+class CoverLetterRenderRequest(BaseModel):
+    basics: dict
+    cover_letter_text: str
+    format: Literal["pdf", "docx"]
+
+
 @app.get("/api/resume-people", dependencies=[Depends(require_internal_token)])
 def list_resume_people(db: Session = Depends(get_db)):
     """Every person available to tailor from - source list for the
@@ -93,6 +99,29 @@ def render_document(body: RenderRequest):
             # missing "basics") surfacing as a Jinja2 UndefinedError or a
             # plain KeyError, rather than an operational failure.
             raise HTTPException(status_code=400, detail=f"Could not render resume data: {e}")
+        return Response(content=out_path.read_bytes(), media_type=media_type)
+
+
+@app.post("/api/render-cover-letter", dependencies=[Depends(require_internal_token)])
+def render_cover_letter_document(body: CoverLetterRenderRequest):
+    """Render a generated cover letter (basics for the letterhead + the
+    plain-text body from time-management's resume-generation feature) into
+    a PDF or DOCX. Same throwaway-temp-dir pattern as /api/render - there's
+    no cover-letter equivalent of a stored per-person template, this is
+    always ad-hoc content passed straight through from the caller."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = Path(tmp)
+        try:
+            if body.format == "pdf":
+                render.build_cover_letter_pdf(body.basics, body.cover_letter_text, out_dir)
+                out_path = out_dir / "cover_letter.pdf"
+                media_type = "application/pdf"
+            else:
+                render.build_cover_letter_docx(body.basics, body.cover_letter_text, out_dir)
+                out_path = out_dir / "cover_letter.docx"
+                media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Could not render cover letter: {e}")
         return Response(content=out_path.read_bytes(), media_type=media_type)
 
 

@@ -12,6 +12,7 @@ Every real person's resume content lives in the `people` table (models.Person)
 receives already-loaded data as a plain dict; it doesn't know or care where
 that dict came from.
 """
+from datetime import date
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -46,6 +47,64 @@ def build_pdf(data, out_dir):
                 path=str(out),
                 format="Letter",
                 print_background=True,
+                margin={"top": "0in", "bottom": "0in", "left": "0in", "right": "0in"},
+            )
+            browser.close()
+        print(f"wrote {out}")
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+# --- Cover letters ---
+#
+# Rendered from just basics (for the letterhead) + the generated body text
+# (see time-management's app/resume_gen.py), not a full resume-shaped dict -
+# there's no per-person cover_letter.yaml, this is always ad-hoc generated
+# content passed straight through from the caller.
+
+
+def _cover_letter_paragraphs(cover_letter_text):
+    """Splits on blank lines into paragraphs, each itself a list of lines
+    (split on single newlines within that paragraph) - a sign-off like
+    "Sincerely,\\nEvan Cooperman" is a single block with no blank line in
+    it, and naively dropping single newlines would silently collapse that
+    onto one line. Callers render each line separately with an explicit
+    break between them rather than joining on a bare "\\n", which HTML (and
+    a single docx run) both ignore."""
+    text = (cover_letter_text or "").strip()
+    blocks = [b.strip() for b in text.split("\n\n") if b.strip()]
+    if not blocks and text:
+        blocks = [text]
+    return [[line.strip() for line in block.splitlines() if line.strip()] for block in blocks]
+
+
+def render_cover_letter_html(basics, cover_letter_text):
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
+    template = env.get_template("cover_letter.html.j2")
+    return template.render(
+        basics=basics,
+        paragraphs=_cover_letter_paragraphs(cover_letter_text),
+        today=date.today().strftime("%B %-d, %Y"),
+    )
+
+
+def build_cover_letter_pdf(basics, cover_letter_text, out_dir):
+    html = render_cover_letter_html(basics, cover_letter_text)
+    tmp = out_dir / "_cover_letter_render.html"
+    tmp.write_text(html)
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            page.goto(tmp.as_uri())
+            out = out_dir / "cover_letter.pdf"
+            page.pdf(
+                path=str(out),
+                format="Letter",
+                print_background=True,
+                # Margins come entirely from the template's @media print
+                # padding (same split as resume.html.j2's build_pdf above) -
+                # zero here so they aren't applied twice.
                 margin={"top": "0in", "bottom": "0in", "left": "0in", "right": "0in"},
             )
             browser.close()
@@ -161,3 +220,37 @@ def _run(paragraph, text, *, bold=False, size=10.5, color=None):
     if color is not None:
         run.font.color.rgb = RGBColor(*color)
     return run
+
+
+def build_cover_letter_docx(basics, cover_letter_text, out_dir):
+    doc = Document()
+
+    style = doc.styles["Normal"]
+    style.font.name = DEFAULT_FONT
+    style.font.size = Pt(11)
+    for section in doc.sections:
+        section.top_margin = Inches(0.75)
+        section.bottom_margin = Inches(0.75)
+        section.left_margin = Inches(0.9)
+        section.right_margin = Inches(0.9)
+
+    _run(doc.add_paragraph(), basics.get("name", ""), bold=True, size=16, color=INK)
+    contact_bits = [basics.get(k, "") for k in ("email", "phone", "location")]
+    _run(doc.add_paragraph(), " · ".join(b for b in contact_bits if b), size=9.5, color=MUTED)
+
+    doc.add_paragraph()
+    _run(doc.add_paragraph(), date.today().strftime("%B %-d, %Y"), size=10.5, color=MUTED)
+    doc.add_paragraph()
+
+    for lines in _cover_letter_paragraphs(cover_letter_text):
+        p = doc.add_paragraph()
+        p.paragraph_format.space_after = Pt(10)
+        last_run = None
+        for line in lines:
+            if last_run is not None:
+                last_run.add_break()
+            last_run = _run(p, line, size=11, color=INK)
+
+    out = out_dir / "cover_letter.docx"
+    doc.save(out)
+    print(f"wrote {out}")

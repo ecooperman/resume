@@ -69,10 +69,23 @@ def main():
     try:
         person = get_default_person(db)
         if person is None:
-            raise SystemExit(
-                "error: no default person is set up yet - create one via the admin "
-                "UI (People) first, or the seed script for a first-time bootstrap."
+            # Not a fatal error: deploy.yml runs this unconditionally on
+            # every push, including the very first deploy of the People
+            # feature itself, when the freshly-migrated people table is
+            # still empty (nobody's been added through the admin UI yet).
+            # Failing hard here would abort deploy.yml's whole script
+            # (set -e) before it ever reaches the systemctl restarts that
+            # bring up the admin UI you'd use to fix this - a real
+            # bootstrapping deadlock. Skipping the build leaves site/ as
+            # whatever it last successfully was (or empty, if truly never
+            # built before); nothing else about the deploy is affected.
+            print(
+                "warning: no default person is set up yet - skipping the public "
+                "site build. Add someone via the admin UI (People) and re-run "
+                "`python build.py` by hand, or just push again once one exists.",
+                file=sys.stderr,
             )
+            return
         data = yaml.safe_load(person.resume_yaml)
     finally:
         db.close()

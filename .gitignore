@@ -2,6 +2,7 @@ venv/
 __pycache__/
 *.pyc
 .idea/
+.DS_Store
 
 # The access-codes DB -- real data lives on the droplet, not in a local
 # working copy. See ../DEPLOYMENT.md.
@@ -12,8 +13,3 @@ access.db.bak
 # are build output and get regenerated on every deploy.
 site/public/
 site/private/
-
-# Rach's own resume file - this repo (ecooperman/resume) is public on
-# GitHub, so this must never be committed. Not a build artifact like the
-# entries above; a deliberate privacy exclusion. See README.md.
-rach-resume.yaml

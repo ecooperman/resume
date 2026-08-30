@@ -20,12 +20,16 @@ zero extra styling work). The DOCX is generated separately with python-docx
 since Word can't just render CSS -- it's styled to look clean, not to be a
 pixel copy of the HTML.
 
-The actual rendering functions (render_html/build_pdf/build_docx) live in
-app/render.py, not here -- app/admin.py's /api/render endpoint reuses them
-too, to turn a *tailored* resume (from the time-management app) into
-PDF/DOCX bytes without touching this file or site/ at all.
+The actual rendering (render_html/build_pdf/build_docx/build_tree/redact)
+lives in app/render.py, not here - this file is just the CLI entry point
+that decides *which* person's data to build from. app/admin.py's People
+routes call build_tree/redact directly too (after any change that could
+affect the live site - editing the default person's resume, or switching
+who's default), so an admin-UI edit takes effect immediately rather than
+waiting for the next deploy. app/admin.py's /api/render endpoint separately
+reuses build_pdf/build_docx alone, to turn a *tailored* resume (from the
+time-management app) into ad-hoc PDF/DOCX bytes without touching site/.
 """
-import copy
 import sys
 from pathlib import Path
 
@@ -33,35 +37,10 @@ import yaml
 
 from app.crud import get_default_person
 from app.database import SessionLocal
-from app.render import build_docx, build_pdf, render_html
+from app.render import build_tree, redact
 
 ROOT = Path(__file__).parent
 SITE = ROOT / "site"
-
-REDACTED_BASICS_FIELDS = ("email", "phone", "location")
-
-
-def redact(data):
-    """Deep-copy data with contact fields stripped from basics, for the
-    public/ tree that's served without a valid access code."""
-    redacted = copy.deepcopy(data)
-    for field in REDACTED_BASICS_FIELDS:
-        redacted["basics"].pop(field, None)
-    return redacted
-
-
-def build_html(data, out_dir):
-    html = render_html(data, show_download_bar=True)
-    out = out_dir / "index.html"
-    out.write_text(html)
-    print(f"wrote {out}")
-
-
-def build_tree(data, out_dir):
-    out_dir.mkdir(parents=True, exist_ok=True)
-    build_html(data, out_dir)
-    build_pdf(data, out_dir)
-    build_docx(data, out_dir)
 
 
 def main():

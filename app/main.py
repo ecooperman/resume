@@ -13,6 +13,7 @@ Both trees are pre-built by `python build.py` into site/public/ and
 site/private/; this app just decides which pre-built file to hand back and
 records that the code was used. No PDF/DOCX generation happens per-request.
 """
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -54,6 +55,24 @@ def _resolve_dir(code: Optional[str], db: Session) -> Path:
 NO_CACHE_HEADERS = {"Cache-Control": "private, no-store"}
 
 
+def _download_filename(db: Session, ext: str) -> str:
+    """The name a download is offered under - was hardcoded to
+    "Evan_Cooperman_Resume.*" regardless of who the site was actually
+    serving, so switching the default person (see app/admin.py's
+    _rebuild_site) fixed the page content but downloads still had the
+    wrong person's name on them. Derived from the *current* default
+    person, same source of truth _rebuild_site uses, not baked in at build
+    time - name is already visible on the public page itself (redact()
+    only strips email/phone/location), so this doesn't expose anything
+    the page doesn't already show."""
+    person = crud.get_default_person(db)
+    if person is None:
+        return f"Resume.{ext}"
+    base = re.sub(r"[^A-Za-z0-9 _-]", " ", person.name)
+    base = re.sub(r"\s+", "_", base.strip()) or "Resume"
+    return f"{base}_Resume.{ext}"
+
+
 @app.get("/")
 def index(code: Optional[str] = None, db: Session = Depends(get_db)):
     directory = _resolve_dir(code, db)
@@ -66,7 +85,7 @@ def resume_pdf(code: Optional[str] = None, db: Session = Depends(get_db)):
     return FileResponse(
         directory / "resume.pdf",
         media_type="application/pdf",
-        filename="Evan_Cooperman_Resume.pdf",
+        filename=_download_filename(db, "pdf"),
         headers=NO_CACHE_HEADERS,
     )
 
@@ -77,6 +96,6 @@ def resume_docx(code: Optional[str] = None, db: Session = Depends(get_db)):
     return FileResponse(
         directory / "resume.docx",
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        filename="Evan_Cooperman_Resume.docx",
+        filename=_download_filename(db, "docx"),
         headers=NO_CACHE_HEADERS,
     )

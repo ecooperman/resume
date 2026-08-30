@@ -27,6 +27,7 @@ from . import crud, render
 from .deps import get_db
 
 ADMIN_STATIC_DIR = Path(__file__).parent.parent / "admin_static"
+SITE_DIR = Path(__file__).parent.parent / "site"
 
 app = FastAPI(title="Resume Admin")
 
@@ -132,6 +133,29 @@ def render_cover_letter_document(body: CoverLetterRenderRequest):
 # deliberately no file/upload-to-disk path anywhere in this app any more.
 
 
+def _rebuild_site(db: Session) -> None:
+    """Regenerates site/private/ and site/public/ from whatever the current
+    default person is - the same two trees build.py (the deploy-time CLI
+    step) produces. Called after any Person create/update, since either
+    could change what the live public site should show (switching who's
+    default, or editing the current default person's resume_yaml) - without
+    this, an admin-UI edit would silently sit in the DB and not actually
+    appear on resume.evancooperman.com until the next git push triggers a
+    real deploy. Best-effort: logs and swallows a rendering failure (e.g. a
+    transient Playwright hiccup) rather than losing the Person write that
+    already succeeded - the site can always be rebuilt by hand
+    (`python build.py`) or by the next deploy either way."""
+    person = crud.get_default_person(db)
+    if person is None:
+        return
+    try:
+        data = yaml.safe_load(person.resume_yaml)
+        render.build_tree(data, SITE_DIR / "private")
+        render.build_tree(render.redact(data), SITE_DIR / "public")
+    except Exception as e:
+        print(f"warning: site rebuild after Person change failed: {e}")
+
+
 class PersonCreateRequest(BaseModel):
     slug: str
     name: str
@@ -179,9 +203,11 @@ def get_person_route(person_id: int, db: Session = Depends(get_db)):
 @app.post("/api/people", response_model=PersonDetailOut)
 def create_person_route(body: PersonCreateRequest, db: Session = Depends(get_db)):
     try:
-        return crud.create_person(db, body.slug, body.name, body.resume_yaml, body.is_default)
+        person = crud.create_person(db, body.slug, body.name, body.resume_yaml, body.is_default)
     except crud.PersonError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    _rebuild_site(db)
+    return person
 
 
 @app.patch("/api/people/{person_id}", response_model=PersonDetailOut)
@@ -194,6 +220,7 @@ def update_person_route(person_id: int, body: PersonUpdateRequest, db: Session =
         raise HTTPException(status_code=400, detail=str(e))
     if person is None:
         raise HTTPException(status_code=404, detail="Person not found")
+    _rebuild_site(db)
     return person
 
 

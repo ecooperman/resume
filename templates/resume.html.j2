@@ -64,6 +64,7 @@
     gap: 28px;
     margin-top: 22px;
   }
+  .links-row--single { justify-content: flex-start; }
   .link-item { text-align: left; }
   .link-label {
     font-size: 10px;
@@ -173,10 +174,39 @@
     .download-bar { flex-direction: column; padding: 0 24px; }
   }
 
+  /* Reapplied by the print engine to every physical page, unlike padding
+     on .page (a single flowing div - its own padding only takes effect
+     once, at the very start of the content, not per generated page). This
+     is what gives page 2+ a top margin instead of content starting flush
+     against the edge. */
+  @page { margin: 0.4in 0.55in; }
+
   @media print {
     body { background: #fff; }
-    .page { max-width: none; padding: 0.4in 0.55in; }
+    /* Margin now comes entirely from @page above, not from padding here -
+       setting both would double it. */
+    .page { max-width: none; padding: 0; }
     .download-bar { display: none; }
+    /* Deliberately scoped to the header (title/company/dates), not the
+       whole .entry - an earlier version avoided breaking inside the whole
+       entry, which backfires for a long one: if it doesn't fit entirely in
+       the remaining space, the *whole* multi-bullet block gets pushed away,
+       leaving a big gap under the section heading. What actually needs
+       protecting is just the header: break-inside so it can't split
+       internally (e.g. title on one page, company orphaned to the next),
+       and break-after so it's never left stranded alone at the bottom of a
+       page with nothing following it. The bullet list itself is
+       deliberately left free to flow and break across pages - a job
+       starting on one page and continuing on the next is fine. */
+    .entry-head { break-inside: avoid; break-after: avoid; page-break-inside: avoid; page-break-after: avoid; }
+    /* Same "don't strand a heading with nothing following it" logic, one
+       level up - otherwise EXPERIENCE/EDUCATION/etc. can be the last thing
+       on a page while its own first entry-head gets pushed to the next. */
+    h2 { break-after: avoid; page-break-after: avoid; }
+    /* Narrower still: keep one bullet's own text from splitting mid-line -
+       much smaller a unit than a whole entry, so this doesn't create the
+       same big-gap risk. */
+    ul.bullets li { break-inside: avoid; page-break-inside: avoid; }
   }
 </style>
 </head>
@@ -215,8 +245,12 @@
           {%- if basics.phone %}{{ basics.phone }}{% endif -%}
         </div>
       </div>
-      {% if basics.website or basics.linkedin or basics.github %}
-      <div class="links-row">
+      {% set link_count = [basics.website, basics.linkedin, basics.github] | select | list | length %}
+      {% if link_count > 0 %}
+      {# Centering a single item reads oddly (looks like a mistake, not a
+         deliberate layout) - only center when there's an actual row of
+         multiple links to center as a group. #}
+      <div class="links-row{% if link_count == 1 %} links-row--single{% endif %}">
         {% if basics.website %}
         <div class="link-item">
           <div class="link-label">Website</div>

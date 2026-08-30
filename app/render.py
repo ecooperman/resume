@@ -12,6 +12,7 @@ Every real person's resume content lives in the `people` table (models.Person)
 receives already-loaded data as a plain dict; it doesn't know or care where
 that dict came from.
 """
+import copy
 from datetime import date
 from pathlib import Path
 
@@ -25,11 +26,43 @@ from docx.oxml import OxmlElement
 ROOT = Path(__file__).resolve().parent.parent  # repo root, one level above app/
 TEMPLATES_DIR = ROOT / "templates"
 
+REDACTED_BASICS_FIELDS = ("email", "phone", "location")
+
 
 def render_html(data, *, show_download_bar):
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("resume.html.j2")
     return template.render(show_download_bar=show_download_bar, **data)
+
+
+def redact(data):
+    """Deep-copy data with contact fields stripped from basics, for the
+    public/ tree that's served without a valid access code."""
+    redacted = copy.deepcopy(data)
+    for field in REDACTED_BASICS_FIELDS:
+        redacted["basics"].pop(field, None)
+    return redacted
+
+
+def build_html(data, out_dir):
+    html = render_html(data, show_download_bar=True)
+    out = out_dir / "index.html"
+    out.write_text(html)
+    print(f"wrote {out}")
+
+
+def build_tree(data, out_dir):
+    """Writes one full site/ tree (index.html + resume.pdf + resume.docx)
+    for the given already-loaded resume data. Called twice per rebuild -
+    once with the real data for site/private/, once with redact(data) for
+    site/public/ - by both build.py (the CLI deploy step) and
+    app/admin.py's People routes (so a change made through the admin UI -
+    editing the default person's resume, or switching who's default - takes
+    effect on the live site immediately, not just on the next deploy)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    build_html(data, out_dir)
+    build_pdf(data, out_dir)
+    build_docx(data, out_dir)
 
 
 def build_pdf(data, out_dir):
@@ -154,9 +187,13 @@ def build_docx(data, out_dir):
     for job in data.get("experience", []):
         if not job.get("include_in_resume", True):
             continue
+        header_paragraphs = []
+
         p = doc.add_paragraph()
         _run(p, job["title"], bold=True, size=11, color=INK)
         _run(p, f"\t{job.get('start', '')} – {job.get('end', '')}", size=9.5, color=MUTED)
+        header_paragraphs.append(p)
+
         # Company on its own line, not sharing the title's line with the
         # tab-aligned date - a long company name pushed against that tab
         # stop wraps awkwardly (same issue fixed in resume.html.j2's
@@ -165,11 +202,20 @@ def build_docx(data, out_dir):
         _run(sub_p, job.get("company", ""), size=9.5, color=INK)
         if job.get("location"):
             _run(sub_p, f" · {job['location']}", size=9.5, color=MUTED)
+        header_paragraphs.append(sub_p)
+
+        bullet_paragraphs = []
         for bullet in job.get("bullets", []):
-            _run(doc.add_paragraph(style="List Bullet"), bullet, size=10, color=INK)
+            bp = doc.add_paragraph(style="List Bullet")
+            _run(bp, bullet, size=10, color=INK)
+            bullet_paragraphs.append(bp)
+
+        _keep_header_together(header_paragraphs, bullet_paragraphs[0] if bullet_paragraphs else None)
 
     _heading(doc, "Education")
     for ed in data.get("education", []):
+        entry_paragraphs = []
+
         p = doc.add_paragraph()
         title = f"{ed.get('degree', '')}"
         if ed.get("field"):
@@ -177,7 +223,13 @@ def build_docx(data, out_dir):
         _run(p, title, bold=True, size=11, color=INK)
         if ed.get("start") or ed.get("end"):
             _run(p, f"\t{ed.get('start', '')} – {ed.get('end', '')}", size=9.5, color=MUTED)
-        _run(doc.add_paragraph(), ed.get("school", ""), size=9.5, color=MUTED)
+        entry_paragraphs.append(p)
+
+        school_p = doc.add_paragraph()
+        _run(school_p, ed.get("school", ""), size=9.5, color=MUTED)
+        entry_paragraphs.append(school_p)
+
+        _keep_together(entry_paragraphs)
 
     if data.get("certifications"):
         _heading(doc, "Certifications")
@@ -212,6 +264,42 @@ def _heading(doc, text):
     p = doc.add_paragraph()
     _run(p, text.upper(), bold=True, size=10.5, color=MUTED)
     p.paragraph_format.space_after = Pt(4)
+
+
+def _keep_together(paragraphs):
+    """Marks a short, always-atomic run of paragraphs (education: title +
+    school, no bullets - genuinely just 1-2 lines total, nothing like
+    Experience's variable-length bullet lists) so Word never splits them
+    across a page break. Every paragraph except the last gets
+    keep_with_next - chaining them into one unbreakable group -
+    deliberately not the last one too, or it'd also try to glue onto the
+    *next* entry's title. keep_together additionally stops a single tall
+    paragraph from splitting internally. Don't reach for this on Experience
+    entries - see _keep_header_together for why."""
+    for p in paragraphs[:-1]:
+        p.paragraph_format.keep_with_next = True
+    for p in paragraphs:
+        p.paragraph_format.keep_together = True
+
+
+def _keep_header_together(header_paragraphs, first_bullet=None):
+    """Chains keep_with_next across a job's header (title, company/
+    location) and - if there are any - into the *first* bullet only, so the
+    header can never be left stranded alone at the bottom of a page with
+    the rest of the entry pushed away (matching resume.html.j2's
+    `.entry-head { break-after: avoid }`, see the "Why" note there).
+    Deliberately doesn't chain into later bullets: an earlier version used
+    _keep_together across the *whole* entry, which backfires for a long
+    one - if it doesn't fit entirely in the remaining space, the whole
+    multi-bullet block gets pushed away, leaving a big gap under the
+    section heading. A job starting on one page and continuing on the next
+    is fine - only the header (plus enough of the body to not look like a
+    stray fragment) needs to stay put."""
+    group = header_paragraphs + ([first_bullet] if first_bullet else [])
+    for p in group[:-1]:
+        p.paragraph_format.keep_with_next = True
+    for p in group:
+        p.paragraph_format.keep_together = True
 
 
 def _run(paragraph, text, *, bold=False, size=10.5, color=None):

@@ -147,13 +147,24 @@ def build_docx(data, out_dir):
         _run(doc.add_paragraph(), basics["summary"].strip(), size=10, color=MUTED)
 
     _heading(doc, "Experience")
+    # include_in_resume: false keeps a job in the source YAML (still
+    # available as context for e.g. cover-letter generation) while leaving
+    # it off the rendered Experience list - same as resume.html.j2's
+    # experience loop. Defaults to included when the key is absent.
     for job in data.get("experience", []):
+        if not job.get("include_in_resume", True):
+            continue
         p = doc.add_paragraph()
         _run(p, job["title"], bold=True, size=11, color=INK)
-        _run(p, f" - {job['company']}", size=10, color=INK)
         _run(p, f"\t{job.get('start', '')} – {job.get('end', '')}", size=9.5, color=MUTED)
+        # Company on its own line, not sharing the title's line with the
+        # tab-aligned date - a long company name pushed against that tab
+        # stop wraps awkwardly (same issue fixed in resume.html.j2's
+        # entry-head, see the "Why" note there).
+        sub_p = doc.add_paragraph()
+        _run(sub_p, job.get("company", ""), size=9.5, color=INK)
         if job.get("location"):
-            _run(doc.add_paragraph(), job["location"], size=9.5, color=MUTED)
+            _run(sub_p, f" · {job['location']}", size=9.5, color=MUTED)
         for bullet in job.get("bullets", []):
             _run(doc.add_paragraph(style="List Bullet"), bullet, size=10, color=INK)
 

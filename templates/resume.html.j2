@@ -111,8 +111,8 @@
     gap: 12px;
   }
   .entry-title { font-size: 14.5px; font-weight: 700; }
-  .entry-org { font-size: 13.5px; font-weight: 500; color: var(--ink); }
   .entry-sub { font-size: 13px; color: var(--muted); margin-top: 1px; }
+  .entry-company { font-weight: 500; color: var(--ink); }
   .entry-dates {
     font-size: 12px;
     color: var(--muted);
@@ -245,13 +245,16 @@
 
     <section>
       <h2>Experience</h2>
-      {% for job in experience %}
+      {# A job with include_in_resume: false stays in the YAML (so it's
+         still available as context for e.g. cover-letter generation) but
+         is deliberately left off the rendered Experience list. Defaults
+         to included when the key is absent, which is nearly every job. #}
+      {% for job in experience if job.get('include_in_resume', True) %}
       <div class="entry">
         <div class="entry-head">
           <div>
             <span class="entry-title">{{ job.title }}</span>
-            <span class="entry-org"> - {{ job.company }}</span>
-            <div class="entry-sub">{{ job.location }}</div>
+            <div class="entry-sub"><span class="entry-company">{{ job.company }}</span>{% if job.location %} · {{ job.location }}{% endif %}</div>
           </div>
           <div class="entry-dates">{{ job.start }} – {{ job.end }}</div>
         </div>

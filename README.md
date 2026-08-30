@@ -44,6 +44,13 @@ so a direct link to `/resume.pdf?code=...` is checked exactly the same way
 as loading the page first. No PDF/DOCX generation happens per-request; this
 script just pre-builds both versions of everything.
 
+Any entry under `experience` can carry `include_in_resume: false` to leave
+it off the printed Experience section while keeping it in the YAML - useful
+for an early/less-relevant role you don't want listed but still want
+available as context (e.g. time-management's "Generate Resume" feature can
+still draw on it when writing a cover letter). Omit the key entirely for
+the normal case; every job without it is included as before.
+
 ## Access codes
 
 The public page (`resume.evancooperman.com` with no `?code=`) never

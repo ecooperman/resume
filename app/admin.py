@@ -11,6 +11,7 @@ has to get right on every request. See README.md.
 Shares the same access_codes table as app/main.py/manage.py via crud.py.
 """
 import os
+import shutil
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -133,27 +134,36 @@ def render_cover_letter_document(body: CoverLetterRenderRequest):
 # deliberately no file/upload-to-disk path anywhere in this app any more.
 
 
-def _rebuild_site(db: Session) -> None:
-    """Regenerates site/private/ and site/public/ from whatever the current
-    default person is - the same two trees build.py (the deploy-time CLI
-    step) produces. Called after any Person create/update, since either
-    could change what the live public site should show (switching who's
-    default, or editing the current default person's resume_yaml) - without
-    this, an admin-UI edit would silently sit in the DB and not actually
-    appear on resume.evancooperman.com until the next git push triggers a
-    real deploy. Best-effort: logs and swallows a rendering failure (e.g. a
+def _rebuild_person_site(person) -> None:
+    """Regenerates this one person's site/private/<slug>/ and
+    site/public/<slug>/ trees - same layout build.py (the deploy-time CLI
+    step) produces for everyone. Called after a Person create/update, since
+    editing their resume_yaml is the only thing that can change what their
+    slug-keyed tree should show - without this, an admin-UI edit would
+    silently sit in the DB and not actually appear on the live site until
+    the next git push triggers a real deploy. Switching who's *default*
+    doesn't need a rebuild at all under this layout: every person's tree
+    already exists at their own slug regardless of default status: only
+    which slug app/main.py resolves to for a bare (no ?person=) request
+    changes. Best-effort: logs and swallows a rendering failure (e.g. a
     transient Playwright hiccup) rather than losing the Person write that
     already succeeded - the site can always be rebuilt by hand
     (`python build.py`) or by the next deploy either way."""
-    person = crud.get_default_person(db)
-    if person is None:
-        return
     try:
         data = yaml.safe_load(person.resume_yaml)
-        render.build_tree(data, SITE_DIR / "private")
-        render.build_tree(render.redact(data), SITE_DIR / "public")
+        render.build_tree(data, SITE_DIR / "private" / person.slug)
+        render.build_tree(render.redact(data), SITE_DIR / "public" / person.slug)
     except Exception as e:
-        print(f"warning: site rebuild after Person change failed: {e}")
+        print(f"warning: site rebuild for {person.slug!r} failed: {e}")
+
+
+def _remove_person_site(slug: str) -> None:
+    """Deletes a person's site/{private,public}/<slug>/ trees - called
+    after a Person delete, so a removed person doesn't leave an orphaned
+    (if harmless - no Person row means ?person=<slug> already 404s
+    regardless) directory sitting on disk indefinitely."""
+    shutil.rmtree(SITE_DIR / "private" / slug, ignore_errors=True)
+    shutil.rmtree(SITE_DIR / "public" / slug, ignore_errors=True)
 
 
 class PersonCreateRequest(BaseModel):
@@ -206,7 +216,7 @@ def create_person_route(body: PersonCreateRequest, db: Session = Depends(get_db)
         person = crud.create_person(db, body.slug, body.name, body.resume_yaml, body.is_default)
     except crud.PersonError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    _rebuild_site(db)
+    _rebuild_person_site(person)
     return person
 
 
@@ -220,12 +230,13 @@ def update_person_route(person_id: int, body: PersonUpdateRequest, db: Session =
         raise HTTPException(status_code=400, detail=str(e))
     if person is None:
         raise HTTPException(status_code=404, detail="Person not found")
-    _rebuild_site(db)
+    _rebuild_person_site(person)
     return person
 
 
 @app.delete("/api/people/{person_id}")
 def delete_person_route(person_id: int, db: Session = Depends(get_db)):
+    person = crud.get_person(db, person_id)
     result = crud.delete_person(db, person_id)
     if result == "not_found":
         raise HTTPException(status_code=404, detail="Person not found")
@@ -233,12 +244,19 @@ def delete_person_route(person_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=409, detail="Can't delete the default person - make someone else default first"
         )
+    if person is not None:
+        _remove_person_site(person.slug)
     return {"ok": True}
 
 
 class CreateCodeRequest(BaseModel):
     label: Optional[str] = None
     days: Optional[int] = None
+    # Who this code unlocks private info for (see AccessCode's docstring on
+    # why codes are person-scoped now). None defaults to the current
+    # default person, matching the pre-multi-person behavior for the
+    # common case of "I only ever generate codes for myself".
+    person_id: Optional[int] = None
 
 
 class CodeOut(BaseModel):
@@ -247,6 +265,9 @@ class CodeOut(BaseModel):
     id: int
     code: str
     label: Optional[str]
+    person_id: Optional[int]
+    person_name: Optional[str] = None
+    person_slug: Optional[str] = None
     created_at: datetime
     expires_at: Optional[datetime]
     revoked_at: Optional[datetime]
@@ -263,21 +284,30 @@ def _status(access_code) -> str:
     return "active"
 
 
-def _to_out(access_code) -> CodeOut:
+def _to_out(access_code, db: Session) -> CodeOut:
     out = CodeOut.model_validate(access_code)
     out.status = _status(access_code)
+    if access_code.person_id is not None:
+        person = crud.get_person(db, access_code.person_id)
+        if person is not None:
+            out.person_name = person.name
+            out.person_slug = person.slug
     return out
 
 
 @app.get("/api/codes", response_model=list[CodeOut])
 def list_codes(db: Session = Depends(get_db)):
-    return [_to_out(c) for c in crud.list_codes(db)]
+    return [_to_out(c, db) for c in crud.list_codes(db)]
 
 
 @app.post("/api/codes", response_model=CodeOut)
 def create_code(body: CreateCodeRequest, db: Session = Depends(get_db)):
-    access_code = crud.generate_code(db, label=body.label, days_valid=body.days)
-    return _to_out(access_code)
+    person_id = body.person_id
+    if person_id is None:
+        default_person = crud.get_default_person(db)
+        person_id = default_person.id if default_person else None
+    access_code = crud.generate_code(db, label=body.label, days_valid=body.days, person_id=person_id)
+    return _to_out(access_code, db)
 
 
 @app.post("/api/codes/{code_id}/revoke", response_model=CodeOut)
@@ -285,7 +315,7 @@ def revoke_code_route(code_id: int, db: Session = Depends(get_db)):
     access_code = crud.revoke_code(db, str(code_id))
     if access_code is None:
         raise HTTPException(status_code=404, detail="Code not found or already revoked")
-    return _to_out(access_code)
+    return _to_out(access_code, db)
 
 
 app.mount("/", StaticFiles(directory=ADMIN_STATIC_DIR, html=True), name="static")

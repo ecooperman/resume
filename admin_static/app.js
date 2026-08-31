@@ -41,12 +41,16 @@ function codeRow(c) {
   const tr = document.createElement("tr");
   tr.className = "status-" + c.status;
 
+  // No ?person=<slug> needed - the code is tied to a specific person and
+  // app/main.py looks that up first, so it's authoritative on its own
+  // regardless of who's currently the default.
   const url = `${SITE_URL}/?code=${c.code}`;
   const lastUsed = fmtDate(c.last_used_at) || "—";
   const expires = fmtDate(c.expires_at) || "never";
 
   tr.innerHTML = `
     <td>${c.label ? escapeHtml(c.label) : "(no label)"}</td>
+    <td>${c.person_name ? escapeHtml(c.person_name) : "—"}</td>
     <td><span class="badge badge-${c.status}">${c.status}</span></td>
     <td>${c.use_count}</td>
     <td>${lastUsed}</td>
@@ -188,10 +192,28 @@ function personRow(p) {
   return div;
 }
 
+function populateCodePersonSelect(people) {
+  const select = document.getElementById("code-person");
+  const previous = select.value;
+  select.innerHTML = "";
+  for (const p of people) {
+    const option = document.createElement("option");
+    option.value = p.id;
+    option.textContent = p.is_default ? `${p.name} (default)` : p.name;
+    select.appendChild(option);
+  }
+  // Keep whatever was selected if it's still around (e.g. after adding a
+  // new person elsewhere on the page), default to the actual default
+  // person otherwise.
+  const stillPresent = people.some((p) => String(p.id) === previous);
+  select.value = stillPresent ? previous : (people.find((p) => p.is_default) || people[0] || {}).id;
+}
+
 async function loadPeople() {
   const people = await fetchJSON("/api/people");
   const container = document.getElementById("people-list");
   container.innerHTML = "";
+  populateCodePersonSelect(people);
   if (people.length === 0) {
     container.innerHTML = `<p class="empty">No one set up yet - add someone below.</p>`;
     return;
@@ -236,7 +258,7 @@ async function loadCodes() {
   const tbody = document.getElementById("codes-body");
   tbody.innerHTML = "";
   if (codes.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty">No codes yet.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">No codes yet.</td></tr>`;
     return;
   }
   for (const c of codes) {
@@ -248,18 +270,20 @@ document.getElementById("create-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const labelInput = document.getElementById("label");
   const daysInput = document.getElementById("days");
+  const personSelect = document.getElementById("code-person");
   const label = labelInput.value.trim() || null;
   const daysRaw = daysInput.value.trim();
   const days = daysRaw ? parseInt(daysRaw, 10) : null;
+  const person_id = personSelect.value ? parseInt(personSelect.value, 10) : null;
   try {
     const c = await fetchJSON("/api/codes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label, days }),
+      body: JSON.stringify({ label, days, person_id }),
     });
     labelInput.value = "";
     daysInput.value = "";
-    showMessage(`Created code for "${c.label || "(no label)"}".`, "success");
+    showMessage(`Created code for "${c.label || "(no label)"}" (${c.person_name || "no person"}).`, "success");
     loadCodes();
   } catch (err) {
     showMessage(err.message, "error");

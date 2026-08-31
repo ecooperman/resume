@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """
 Manage access codes that unlock the full resume (contact info + unredacted
-downloads) at resume.evancooperman.com/?code=<code>.
+downloads) at resume.evancooperman.com/?code=<code>. Each code is scoped to
+one specific person (see app/models.AccessCode) - --person defaults to
+whoever's currently the default person, and only needs to be passed
+explicitly for someone else (whose URL then also needs ?person=<slug>, see
+app/main.py's _resolve_dir - printed automatically by `create` below).
 
     python manage.py create --label "Acme Corp recruiter" --days 30
+    python manage.py create --label "Rach's recruiter" --person rach
     python manage.py list
     python manage.py revoke <code-or-id>
 
@@ -34,10 +39,25 @@ SITE_URL = "https://resume.evancooperman.com"
 def cmd_create(args):
     db = SessionLocal()
     try:
-        access_code = crud.generate_code(db, label=args.label, days_valid=args.days)
-        print(f"Created code for: {access_code.label or '(no label)'}")
+        if args.person:
+            person = crud.get_person_by_slug(db, args.person)
+            if person is None:
+                print(f"error: no person with slug {args.person!r}", file=sys.stderr)
+                sys.exit(1)
+        else:
+            person = crud.get_default_person(db)
+            if person is None:
+                print("error: no default person is set up yet - add one via the admin UI first", file=sys.stderr)
+                sys.exit(1)
+        access_code = crud.generate_code(db, label=args.label, days_valid=args.days, person_id=person.id)
+        # No ?person=<slug> needed - the code is tied to person.id directly
+        # and app/main.py looks that up first, so it's authoritative on its
+        # own regardless of who's currently the default (see
+        # app/models.AccessCode's docstring).
+        url = f"{SITE_URL}/?code={access_code.code}"
+        print(f"Created code for: {access_code.label or '(no label)'} (person: {person.name})")
         print(f"  expires: {access_code.expires_at or 'never'}")
-        print(f"  URL: {SITE_URL}/?code={access_code.code}")
+        print(f"  URL: {url}")
     finally:
         db.close()
 
@@ -57,7 +77,9 @@ def cmd_list(args):
             else:
                 status = "active"
             last_used = f", last used {c.last_used_at:%Y-%m-%d}" if c.last_used_at else ""
-            print(f"[{c.id}] {c.label or '(no label)':30s} {status:20s} used {c.use_count}x{last_used}")
+            person = crud.get_person(db, c.person_id) if c.person_id is not None else None
+            person_bit = f" [{person.name}]" if person else " [no person - pre-migration?]"
+            print(f"[{c.id}] {c.label or '(no label)':30s}{person_bit} {status:20s} used {c.use_count}x{last_used}")
             print(f"      {c.code}")
     finally:
         db.close()
@@ -96,6 +118,9 @@ def main():
     p_create = sub.add_parser("create", help="Generate a new access code")
     p_create.add_argument("--label", help="Who this code is for, e.g. 'Acme Corp recruiter'")
     p_create.add_argument("--days", type=int, default=None, help="Days until it expires (default: never)")
+    p_create.add_argument(
+        "--person", help="Slug of the person this code unlocks (default: the current default person)"
+    )
     p_create.set_defaults(func=cmd_create)
 
     p_list = sub.add_parser("list", help="List all codes and their status")

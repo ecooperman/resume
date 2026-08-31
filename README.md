@@ -7,10 +7,10 @@ hostname/port, or via a CLI.
 
 ```
 templates/resume.html.j2 <- the design (HTML/CSS)
-build.py                 <- default person's resume data -> site/{public,private}/{index.html,resume.pdf,resume.docx}
+build.py                 <- every person's resume data -> site/{public,private}/<slug>/{index.html,resume.pdf,resume.docx}
 app/
   render.py                <- the actual rendering pipeline (build.py and app/admin.py both use it)
-  main.py                 <- public resume app (port 8040): serves public/ or private/ per ?code=...
+  main.py                 <- public resume app (port 8040): serves public/<slug>/ or private/<slug>/
   admin.py                 <- admin API (port 8041, separate process - see "Access codes" below)
   models.py, crud.py      <- access_codes + people tables (SQLAlchemy) - see "People" below
 admin_static/              <- no-build-step admin frontend (served by app/admin.py)
@@ -27,10 +27,11 @@ below for why), then regenerate the public site:
 python build.py
 ```
 
-This regenerates two full trees under `site/`:
-- **`private/`** - everything, including `basics.email`/`phone`/`location`
-- **`public/`** - those three fields stripped out before rendering, nothing
-  else touched
+This regenerates two full trees per person under `site/`, each keyed by
+their slug:
+- **`private/<slug>/`** - everything, including `basics.email`/`phone`/`location`
+- **`public/<slug>/`** - those three fields stripped out before rendering,
+  nothing else touched
 
 Each tree gets its own `index.html` (styled from `templates/resume.html.j2`),
 `resume.pdf` (that same page printed by headless Chromium via Playwright, so
@@ -42,7 +43,19 @@ CSS - styled to look clean, not to be a pixel copy of the HTML).
 `/`, `/resume.pdf`, and `/resume.docx` independently - there's no session,
 so a direct link to `/resume.pdf?code=...` is checked exactly the same way
 as loading the page first. No PDF/DOCX generation happens per-request; this
-script just pre-builds both versions of everything.
+script just pre-builds every person's site up front. An admin-UI edit to a
+person also triggers a rebuild of just their own tree directly (see
+`app/admin.py`'s `_rebuild_person_site`), so a change is live immediately -
+`python build.py` only needs running by hand for a from-scratch rebuild or
+recovering from a failed automatic one.
+
+By default `/` serves the current default person (`is_default=True`, exactly
+one at a time) - add `?person=<slug>` to view or download anyone else's
+**public** page instead, e.g. `resume.evancooperman.com/?person=rach`. A
+valid `?code=...` overrides this entirely: since a code is tied to one
+specific person (see "Access codes" below), it's looked up first and is
+authoritative on its own - whoever it belongs to, full private view, no
+`?person=` needed or even considered.
 
 Any entry under `experience` can carry `include_in_resume: false` to leave
 it off the printed Experience section while keeping it in the YAML - useful
@@ -57,9 +70,17 @@ The public page (`resume.evancooperman.com` with no `?code=`) never
 includes phone/email/location. Passing a valid code - `?code=<token>` -
 unlocks the full version, on the page and in both downloads.
 
+Every code is tied to exactly one person (`AccessCode.person_id`), chosen
+when it's created - it unlocks *that* person's private info and nothing
+else, regardless of what (if anything) `?person=<slug>` on the request
+names, and regardless of who's currently the default person. A code's own
+link is just `?code=<token>` - no `?person=` needed, since the code already
+says who it's for.
+
 **Admin panel** (day-to-day way to manage codes): `resume-admin.evancooperman.com`,
-behind the normal Cloudflare Access login like your other apps. Create,
-copy a shareable link, and revoke, all from the browser - no SSH needed.
+behind the normal Cloudflare Access login like your other apps. Pick who a
+new code is for, create it, copy the shareable link, and revoke, all from
+the browser - no SSH needed.
 
 It's a genuinely separate FastAPI app/process/port from the public resume
 (`app/admin.py`, port 8041), not just a different route on the same app.
@@ -77,7 +98,8 @@ the venv active (a code only works against the DB it was created in, so
 this has to run against the live DB, not your local copy):
 
 ```bash
-python manage.py create --label "Acme Corp recruiter" --days 30   # --days omitted = never expires
+python manage.py create --label "Acme Corp recruiter" --days 30   # --days omitted = never expires; --person omitted = the current default person
+python manage.py create --label "Rach's recruiter" --person rach --days 30
 python manage.py list
 python manage.py revoke <code-or-id>
 ```
@@ -98,8 +120,10 @@ replaced because this repo is public on GitHub (a committed resume file's
 raw contact info would be scrapable, bypassing the access-code redaction
 below entirely) and because editing a file needed `scp`/SSH access, not
 just a browser. Exactly one person has `is_default=True` at a time - that's
-who `build.py` (this section's public site) and a bare `/api/resume-data`
-call (no `?person=`) resolve to.
+who a bare request with no `?person=`/`?code=` (a plain visit to
+resume.evancooperman.com, or a bare `/api/resume-data` call) resolves to.
+`build.py` itself builds *everyone's* tree, not just the default person's -
+see "Editing your resume" above.
 
 First-time bootstrap from an existing file (not needed for ongoing edits -
 those go through the People UI):

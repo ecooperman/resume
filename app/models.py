@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 
 from .database import Base
 
@@ -35,6 +35,20 @@ class AccessCode(Base):
     Validity is computed at read time (see crud.get_valid_code), not stored
     as a status column -- a code is valid iff revoked_at is null and
     (expires_at is null or expires_at is in the future).
+
+    person_id scopes a code to exactly one Person - app/main.py looks up
+    the code *first* and derives who it's for directly from person_id, so
+    there's no separate ?person=<slug> to also get right for the private-
+    unlock path (a code is just authoritative on its own); ?person= only
+    matters for public browsing with no code at all. Nullable only for rows
+    that predate this column; the migration that added it backfills every
+    existing code to whichever person was the default at migration time, so
+    in practice every code has always really been "for" a specific person -
+    this column just makes that explicit instead of implicitly assuming
+    "the default person, whoever that currently is" (which would let a code
+    silently start unlocking a *different* person's private info the
+    moment someone else becomes the new default - a real leak, not just an
+    edge case, given this is a household resume site).
     """
 
     __tablename__ = "access_codes"
@@ -42,6 +56,7 @@ class AccessCode(Base):
     id = Column(Integer, primary_key=True)
     code = Column(String, unique=True, nullable=False, index=True)
     label = Column(String, nullable=True)
+    person_id = Column(Integer, ForeignKey("people.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     expires_at = Column(DateTime, nullable=True)
     revoked_at = Column(DateTime, nullable=True)

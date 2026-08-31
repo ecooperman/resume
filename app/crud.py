@@ -117,12 +117,20 @@ def delete_person(db: Session, person_id: int) -> str:
     return "ok"
 
 
-def generate_code(db: Session, label: Optional[str] = None, days_valid: Optional[int] = None) -> models.AccessCode:
-    """Create a new access code. days_valid=None means it never expires."""
+def generate_code(
+    db: Session, label: Optional[str] = None, days_valid: Optional[int] = None, person_id: Optional[int] = None
+) -> models.AccessCode:
+    """Create a new access code, scoped to person_id (see AccessCode's
+    docstring for why this matters). days_valid=None means it never
+    expires. person_id=None only makes sense when no person exists yet at
+    all (matches build.py's own bootstrapping tolerance) - callers should
+    otherwise always pass one, defaulting to the current default person
+    when the caller (admin UI, manage.py) doesn't ask for someone specific."""
     expires_at = datetime.utcnow() + timedelta(days=days_valid) if days_valid else None
     access_code = models.AccessCode(
         code=secrets.token_urlsafe(24),
         label=label,
+        person_id=person_id,
         expires_at=expires_at,
     )
     db.add(access_code)

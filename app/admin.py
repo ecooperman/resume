@@ -18,13 +18,13 @@ from pathlib import Path
 from typing import Literal, Optional
 
 import yaml
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from . import crud, render
+from . import config, crud, generate, render
 from .deps import get_db
 
 ADMIN_STATIC_DIR = Path(__file__).parent.parent / "admin_static"
@@ -125,6 +125,41 @@ def render_cover_letter_document(body: CoverLetterRenderRequest):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Could not render cover letter: {e}")
         return Response(content=out_path.read_bytes(), media_type=media_type)
+
+
+# --- Resume generation: browser-facing, same Cloudflare-Access-only gating
+# as the People CRUD below. Takes uploaded source material, returns
+# generated YAML text for the admin UI to drop into the "Add person" form
+# for review/editing - never writes a Person itself (see app/generate.py's
+# docstring for why that review step matters).
+class GenerateResumeOut(BaseModel):
+    resume_yaml: str
+
+
+@app.post("/api/generate-resume", response_model=GenerateResumeOut)
+async def generate_resume_route(
+    linkedin_profile: Optional[UploadFile] = File(default=None),
+    documents: list[UploadFile] = File(default=[]),
+    notes: str = Form(default=""),
+):
+    if not config.ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY is not configured - see README.md for setup")
+
+    try:
+        linkedin_text = None
+        if linkedin_profile is not None and linkedin_profile.filename:
+            linkedin_text = generate.extract_text(linkedin_profile.filename, await linkedin_profile.read())
+
+        doc_texts = []
+        for upload in documents:
+            if not upload.filename:
+                continue
+            doc_texts.append((upload.filename, generate.extract_text(upload.filename, await upload.read())))
+
+        resume_yaml = generate.generate_resume_yaml(linkedin_text, doc_texts, notes)
+    except generate.ResumeGenerationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return GenerateResumeOut(resume_yaml=resume_yaml)
 
 
 # --- People: browser-facing CRUD for the admin UI (admin_static/), gated

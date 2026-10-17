@@ -210,3 +210,38 @@ hr {
   color: #fff;
   cursor: pointer;
 }
+
+#generate-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+#generate-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+#generate-form input[type="file"] { font-size: 13px; }
+#generate-form textarea {
+  font-size: 13.5px;
+  padding: 9px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font-family: inherit;
+}
+#generate-form button {
+  align-self: flex-start;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+#generate-form button:disabled { opacity: 0.6; cursor: default; }
+#gen-status { font-size: 13px; color: var(--muted); }

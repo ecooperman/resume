@@ -223,6 +223,41 @@ async function loadPeople() {
   }
 }
 
+document.getElementById("generate-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const linkedinInput = document.getElementById("gen-linkedin-file");
+  const docsInput = document.getElementById("gen-docs-files");
+  const notesInput = document.getElementById("gen-notes");
+  const genBtn = document.getElementById("gen-btn");
+  const genStatus = document.getElementById("gen-status");
+
+  const formData = new FormData();
+  if (linkedinInput.files[0]) formData.append("linkedin_profile", linkedinInput.files[0]);
+  for (const f of docsInput.files) formData.append("documents", f);
+  formData.append("notes", notesInput.value);
+
+  if (!linkedinInput.files[0] && docsInput.files.length === 0) {
+    showMessage("Add a LinkedIn export and/or at least one document first.", "error");
+    return;
+  }
+
+  genBtn.disabled = true;
+  genStatus.textContent = "Generating - this can take 20-60 seconds…";
+  try {
+    // No Content-Type header set deliberately - the browser sets the
+    // multipart boundary itself when the body is a FormData.
+    const result = await fetchJSON("/api/generate-resume", { method: "POST", body: formData });
+    document.getElementById("person-yaml").value = result.resume_yaml;
+    document.getElementById("person-yaml").scrollIntoView({ behavior: "smooth", block: "center" });
+    showMessage("Generated - review the YAML below, fill in a name/slug, then Add person.", "success");
+  } catch (err) {
+    showMessage(err.message, "error");
+  } finally {
+    genBtn.disabled = false;
+    genStatus.textContent = "";
+  }
+});
+
 document.getElementById("add-person-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const nameInput = document.getElementById("person-name");

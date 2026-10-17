@@ -1,0 +1,117 @@
+# Example resume.yaml - a fully-populated, fictional reference showing
+# every field this app's rendering pipeline understands. Copy this file,
+# replace the content with your own real information, and paste the result
+# into the admin UI's "Add person" form (see README.md's "Editing your
+# resume" and "Constructing your resume.yaml" sections) - it only requires
+# a top-level `basics` key, matching this shape.
+#
+# Don't feel obligated to trim this down to "resume length" yourself before
+# pasting it in - see the README for why it's worth including *more* than
+# you'd ever put on a single printed page.
+
+basics:
+  name: Jordan Rivera
+  title: Senior Software Engineer
+  email: jordan.rivera@example.com
+  phone: "555.123.4567"
+  location: Denver, CO (Remote)
+  # Bare hostnames/paths, not full URLs - the template adds "https://"
+  # automatically. Any of website/linkedin/github can be omitted entirely;
+  # the header lays itself out around whichever are present.
+  website: jordanrivera.dev
+  linkedin: linkedin.com/in/jordanrivera
+  github: github.com/jrivera
+  summary: >
+    Backend-focused software engineer with 10+ years building and scaling
+    distributed systems for consumer-facing products, from early-stage
+    startups through a Series D company. Deep experience with Python and
+    Go microservices, event-driven architecture, and mentoring engineers
+    through their first few years. Recently led a team's migration to
+    Kubernetes and built out its on-call/observability practice from
+    scratch.
+
+experience:
+  - company: Meridian Health
+    title: Staff Software Engineer
+    location: Denver, CO (Remote)
+    start: Mar 2023
+    end: Present
+    bullets:
+      - Lead a team of 5 engineers rebuilding the claims-processing pipeline from a monolithic Rails app into event-driven Go services, cutting average claim processing time from 4 hours to 12 minutes.
+      - Own the on-call rotation and incident-response process for the payments platform; introduced structured postmortems and reduced repeat incidents by 60% over two quarters.
+      - Drove the team's migration from EC2 to Kubernetes (EKS), including writing the internal runbooks and training four engineers who'd never used Kubernetes before.
+      - Partner directly with Product and Compliance to scope HIPAA-sensitive data-handling requirements before implementation starts, not after.
+
+  - company: Lighthouse Analytics
+    title: Senior Software Engineer
+    location: Remote
+    start: Jul 2020
+    end: Feb 2023
+    bullets:
+      - Built the core ingestion pipeline for a real-time analytics product processing 50M+ events/day, using Kafka and Python (asyncio).
+      - Designed and shipped a multi-tenant permissions system used by every downstream service in the company, replacing a patchwork of ad-hoc checks.
+      - Mentored two junior engineers through their first year, both of whom were promoted to mid-level within 18 months.
+      - Reduced average API p99 latency by 45% by identifying and fixing N+1 query patterns across the service layer.
+
+  - company: Lighthouse Analytics
+    title: Software Engineer
+    location: Remote
+    start: Aug 2018
+    end: Jun 2020
+    bullets:
+      - Joined as the third engineer on the founding team; built the original MVP's backend (Django) that the company's first 200 customers ran on.
+      - Implemented the company's first automated testing and CI/CD pipeline (GitHub Actions), reducing deploy time from a 45-minute manual process to under 5 minutes.
+
+  - company: CampusEats
+    title: Software Engineering Intern
+    location: Boulder, CO
+    start: May 2017
+    end: Aug 2017
+    # Kept in the file for context (it's real experience, and useful when
+    # generating a cover letter for an entry-level or campus-recruiting
+    # role) but left off the *printed* resume for a senior-level job
+    # search - see README's note on include_in_resume.
+    include_in_resume: false
+    bullets:
+      - Built a Django REST API for a campus food-delivery app used by roughly 3,000 students.
+      - First professional experience with Python, git, and agile ceremonies.
+
+education:
+  - school: University of Colorado Boulder
+    degree: B.S.
+    field: Computer Science
+    start: "2014"
+    end: "2018"
+    details: Minor in Applied Mathematics
+
+certifications:
+  - name: Certified Kubernetes Administrator (CKA)
+    issuer: The Linux Foundation
+  - name: AWS Certified Solutions Architect - Associate
+    issuer: Amazon Web Services
+
+skills:
+  - category: Languages
+    items: [Python, Go, TypeScript, SQL]
+  - category: Infrastructure
+    items: [Kubernetes, Docker, Terraform, "AWS (EKS, RDS, SQS)", GitHub Actions]
+  - category: Data & Messaging
+    items: [Kafka, PostgreSQL, Redis, Elasticsearch]
+  - category: Practices
+    items: [Distributed systems design, On-call/incident response, Mentoring, Code review culture]
+
+# Optional section - omit entirely if you don't have side projects, talks,
+# or open-source work worth listing.
+projects:
+  - name: pgqueue
+    link: github.com/jrivera/pgqueue
+    description: >
+      An open-source, Postgres-backed job queue for Python (asyncio) -
+      built as a lighter-weight alternative to running a full message
+      broker for small-to-mid-size projects. ~400 GitHub stars.
+  - name: "Talk: Postgres as a Message Queue"
+    # link is optional too - this entry has none.
+    description: >
+      Conference talk at a regional Python meetup (2023) on using
+      Postgres SKIP LOCKED for lightweight job queues without adding new
+      infrastructure.

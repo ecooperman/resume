@@ -64,6 +64,73 @@ available as context (e.g. time-management's "Generate Resume" feature can
 still draw on it when writing a cover letter). Omit the key entirely for
 the normal case; every job without it is included as before.
 
+## Constructing your resume.yaml
+
+[`example-resume.yaml`](example-resume.yaml) in this repo is a fully
+populated, fictional reference showing every field the app understands
+(every field used in `templates/resume.html.j2` and `app/render.py`'s DOCX
+builder) - use it as the schema to match, not something to fill in by hand
+top to bottom.
+
+The easiest way to actually produce your own: hand Claude everything you
+have - old resume files (PDF/DOCX/text, any number of versions/years),
+your LinkedIn profile (LinkedIn will export your own profile as a PDF from
+its "Save to PDF" option - Claude can't fetch a profile from a bare URL,
+LinkedIn blocks scraping), and any other loose context about your skills,
+clients, side projects, or accomplishments that isn't written down
+anywhere formal - and ask it to produce a `resume.yaml` matching this
+file's structure. A prompt along these lines works well:
+
+> I want you to build a resume.yaml for me, matching the structure of the
+> attached example-resume.yaml exactly. I'm attaching my old resumes and
+> my LinkedIn profile PDF, plus some extra context below. Include every
+> piece of experience, every skill, and every accomplishment you can find
+> or that I mention - don't trim anything down to "resume length" or
+> decide something's not worth including. I'll narrow it down myself
+> later using include_in_resume: false, or by tailoring per job - for now
+> I'd rather have too much in the source file than too little.
+>
+> [paste/attach old resumes, LinkedIn PDF, and any other context here]
+
+The "include everything, don't trim" instruction matters: this file isn't
+your printed resume, it's the *source of truth* a printed resume (and
+time-management's per-job tailored resumes and cover letters) gets
+generated from. An old job, a certification, a side project, or a skill
+that wouldn't make a generic one-page resume can still be exactly the
+right thing to surface for one specific job posting - keeping it in the
+YAML (with `include_in_resume: false` if you don't want it on your default
+printed version) means it's still there to draw on later, instead of lost
+because it got cut during the first pass.
+
+### Self-service: generating it without touching Claude directly
+
+The admin UI's **"Generate a resume.yaml from documents"** section (on the
+People page) does the above for you, so someone using this app doesn't
+need a Claude account or to write a prompt themselves:
+
+1. On your own `linkedin.com/in/...` profile page, open the
+   job-application-chrome-extension's popup and click **"Export LinkedIn
+   profile"** (only shown on a profile page). Expand any "Show all"
+   links in Experience/Education/etc. first so nothing's collapsed off
+   the page - it downloads a `linkedin-profile-export-<date>.json`.
+2. In the admin UI, upload that JSON plus any other documents you have
+   (old resumes as PDF/DOCX, LinkedIn's own "Get a copy of your data"
+   export, plain-text notes) and optionally add a sentence or two of
+   extra context, then click **Generate**.
+3. The generated YAML lands in the "Add person" form's textarea below -
+   review and edit it (this is still just a first draft from messy
+   source material - check names, dates, and anything that looks off)
+   before filling in a name/slug and clicking **Add person**.
+
+Under the hood this is the exact same Claude call described above (see
+`app/generate.py`), just with the prompt and file-reading done server-side
+instead of by hand. It needs `ANTHROPIC_API_KEY` set (see "Local setup"
+below) - without it, the endpoint returns a clear error rather than a
+crash. The LinkedIn export itself never touches LinkedIn's servers or
+scrapes anyone else's data - it's the extension reading your own already-
+authenticated profile page's DOM, the same legitimate pattern the
+extension's job-scoring features already use, not automated scraping.
+
 ## Access codes
 
 The public page (`resume.evancooperman.com` with no `?code=`) never
@@ -163,6 +230,17 @@ against another process on the same droplet, not the primary access control.
 shell before running `uvicorn app.admin:app`; on the droplet, set it in
 `/etc/systemd/system/resume-admin.service` (never commit the real value -
 see `deploy/resume-admin.service` for the placeholder line).
+
+`app/admin.py` also exposes `POST /api/generate-resume` - the browser-
+facing "Generate a resume.yaml from documents" feature (see "Self-service"
+above under "Constructing your resume.yaml"). Unlike the three above, this
+one is gated the same way as the rest of the admin UI (Cloudflare Access on
+this hostname, no internal token) since it's meant to be used from a
+browser, not called by another app. It needs its own `ANTHROPIC_API_KEY`
+environment variable set (same convention as `time-management`'s own - a
+separate key is fine, they're unrelated processes) - export it in your
+shell locally, set it on `resume-admin.service` on the droplet. Without it,
+the endpoint returns a clear 503 instead of a crash.
 
 ## Local setup
 

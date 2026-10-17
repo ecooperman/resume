@@ -13,6 +13,7 @@ receives already-loaded data as a plain dict; it doesn't know or care where
 that dict came from.
 """
 import copy
+import re
 from datetime import date
 from pathlib import Path
 
@@ -28,8 +29,28 @@ TEMPLATES_DIR = ROOT / "templates"
 
 REDACTED_BASICS_FIELDS = ("email", "phone", "location")
 
+_MULTI_DASH_RE = re.compile(r"-{2,}")
+
+
+def _collapse_dashes(value):
+    """Recursively collapses runs of 2+ hyphens ("--", "---", ...) down to a
+    single "-" everywhere in a resume-data structure, including the common
+    " -- " typed as a stand-in for an em dash. Applied defensively at every
+    render entry point (HTML/PDF via render_html, DOCX via build_docx, and
+    cover letters) so a double dash can never reach a generated document
+    regardless of whether the source YAML/DB data follows that rule -
+    belt-and-suspenders alongside keeping the data itself clean."""
+    if isinstance(value, str):
+        return _MULTI_DASH_RE.sub("-", value)
+    if isinstance(value, dict):
+        return {k: _collapse_dashes(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_collapse_dashes(v) for v in value]
+    return value
+
 
 def render_html(data, *, show_download_bar):
+    data = _collapse_dashes(data)
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("resume.html.j2")
     return template.render(show_download_bar=show_download_bar, **data)
@@ -112,6 +133,8 @@ def _cover_letter_paragraphs(cover_letter_text):
 
 
 def render_cover_letter_html(basics, cover_letter_text):
+    basics = _collapse_dashes(basics)
+    cover_letter_text = _collapse_dashes(cover_letter_text)
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("cover_letter.html.j2")
     return template.render(
@@ -153,6 +176,7 @@ INK = (0x1A, 0x1D, 0x23)
 
 
 def build_docx(data, out_dir):
+    data = _collapse_dashes(data)
     basics = data["basics"]
     doc = Document()
 
@@ -322,6 +346,8 @@ def _run(paragraph, text, *, bold=False, size=10.5, color=None):
 
 
 def build_cover_letter_docx(basics, cover_letter_text, out_dir):
+    basics = _collapse_dashes(basics)
+    cover_letter_text = _collapse_dashes(cover_letter_text)
     doc = Document()
 
     style = doc.styles["Normal"]

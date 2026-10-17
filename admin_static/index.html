@@ -20,10 +20,27 @@
     </p>
     <div id="people-list"></div>
 
+    <h3>Generate a resume.yaml from documents</h3>
+    <p class="hint">
+      Don't want to hand-write YAML? Upload a LinkedIn profile export (from the job-application Chrome
+      extension's "Export LinkedIn profile" button, on your own linkedin.com/in/ page) and/or any other
+      documents you have - old resumes as PDF/DOCX, LinkedIn's own "Get a copy of your data" export, plain
+      text notes - and Claude will draft a resume.yaml from them into the form below for you to review and
+      edit before adding. See README.md's "Constructing your resume.yaml" section for more on what to feed
+      it. This can take 20-60 seconds.
+    </p>
+    <form id="generate-form">
+      <label>LinkedIn profile export (.json)<input type="file" id="gen-linkedin-file" accept=".json"></label>
+      <label>Other documents (old resumes, notes, etc.)<input type="file" id="gen-docs-files" multiple accept=".pdf,.docx,.txt,.md,.csv,.json,.yaml,.yml"></label>
+      <textarea id="gen-notes" rows="3" placeholder="Any extra context worth mentioning (optional)"></textarea>
+      <button type="submit" id="gen-btn">Generate</button>
+      <span id="gen-status" class="status"></span>
+    </form>
+
     <form id="add-person-form">
       <input type="text" id="person-name" placeholder="Name, e.g. &quot;Rach&quot;" required>
       <input type="text" id="person-slug" placeholder="Slug, e.g. &quot;rach&quot; (lowercase, no spaces)" required>
-      <textarea id="person-yaml" rows="6" placeholder="Paste resume YAML here (must have a top-level 'basics' key)" required></textarea>
+      <textarea id="person-yaml" rows="6" placeholder="Paste resume YAML here (must have a top-level 'basics' key), or use Generate above" required></textarea>
       <label><input type="checkbox" id="person-default"> Make this the default</label>
       <button type="submit">Add person</button>
     </form>

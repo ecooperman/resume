@@ -236,11 +236,11 @@ facing "Generate a resume.yaml from documents" feature (see "Self-service"
 above under "Constructing your resume.yaml"). Unlike the three above, this
 one is gated the same way as the rest of the admin UI (Cloudflare Access on
 this hostname, no internal token) since it's meant to be used from a
-browser, not called by another app. It needs its own `ANTHROPIC_API_KEY`
-environment variable set (same convention as `time-management`'s own - a
-separate key is fine, they're unrelated processes) - export it in your
-shell locally, set it on `resume-admin.service` on the droplet. Without it,
-the endpoint returns a clear 503 instead of a crash.
+browser, not called by another app. It needs `ANTHROPIC_API_KEY` set -
+export it in your shell locally; on the droplet it comes from the shared
+secrets file every app reads (`/etc/personal-apps/shared.env`, see
+`DEPLOYMENT.md`). Without it, the endpoint returns a clear 503 instead of a
+crash.
 
 ## Local setup
 

@@ -5,17 +5,17 @@ After=network.target
 [Service]
 User=deploy
 WorkingDirectory=/opt/apps/resume
+# Secrets shared by every app (ANTHROPIC_API_KEY, GOOGLE_MAPS_API_KEY, ...)
+# live in one root-only file on the droplet, never in this repo - see
+# DEPLOYMENT.md's "Shared secrets" step. The leading "-" means a missing
+# file isn't an error, so an app that doesn't use any of them still starts.
+EnvironmentFile=-/etc/personal-apps/shared.env
 # INTERNAL_API_TOKEN gates the /api/resume-data and /api/render endpoints
 # time-management's resume-generation feature calls - set the real value
 # here directly on the droplet (never commit it): sudo systemctl edit
 # resume-admin, or edit this file in place after copying it in. Must match
 # the value set on time-management.service.
 Environment=INTERNAL_API_TOKEN=
-# ANTHROPIC_API_KEY powers the browser-facing "Generate a resume.yaml from
-# documents" admin feature (app/generate.py) - a separate key from
-# time-management's own ANTHROPIC_API_KEY is fine, these are unrelated
-# processes. Set the real value directly on the droplet (never commit it).
-Environment=ANTHROPIC_API_KEY=
 ExecStart=/opt/apps/resume/venv/bin/uvicorn app.admin:app --host 127.0.0.1 --port 8041
 Restart=on-failure
 RestartSec=3

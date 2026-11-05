@@ -1,14 +1,28 @@
 const SITE_URL = "https://resume.evancooperman.com";
 
+// Plain words for an error the server gave no message with.
+function friendlyStatus(status) {
+  if (status === 401 || status === 403) return "You've been signed out or aren't allowed to do that - reload the page and try again.";
+  if (status === 404) return "That couldn't be found - it may have been removed. Reload the page and try again.";
+  if (status === 408 || status === 429) return "Too many requests right now - wait a moment and try again.";
+  if (status >= 500) return "Something went wrong on the server - try again in a moment.";
+  return `That didn't work (error ${status}).`;
+}
+
 async function fetchJSON(url, options) {
-  const res = await fetch(url, options);
+  let res;
+  try {
+    res = await fetch(url, options);
+  } catch (e) {
+    throw new Error("Couldn't reach the server - check your connection and try again. If you were signed out, reload the page.");
+  }
   if (!res.ok) {
-    let detail = `${url} -> ${res.status}`;
+    let detail = friendlyStatus(res.status);
     try {
       const body = await res.json();
-      if (body.detail) detail = body.detail;
+      if (typeof body.detail === "string" && body.detail.trim()) detail = body.detail;
     } catch (e) {
-      // ignore, use default detail
+      // not JSON - keep the status wording
     }
     throw new Error(detail);
   }

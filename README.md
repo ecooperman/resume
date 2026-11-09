@@ -381,3 +381,8 @@ for the second service.
    responses are JSON/dynamic rather than static assets.
 
 9. Push to `main` - CI takes it from here on future updates.
+
+## To do
+
+The running to-do list for all projects is `../TODO.md` (in the personal-projects
+folder, one level up; not in git).

@@ -13,10 +13,20 @@ app/
   main.py                 <- public resume app (port 8040): serves public/<slug>/ or private/<slug>/
   admin.py                 <- admin API (port 8041, separate process - see "Access codes" below)
   models.py, crud.py      <- access_codes + people tables (SQLAlchemy) - see "People" below
-admin_static/              <- no-build-step admin frontend (served by app/admin.py)
+admin_templates/           <- the two admin pages (People, Access codes), Jinja2 so the shared-assets URL is baked in
+admin_static/              <- their no-build-step JS and the little CSS that is specific to this app (served by app/admin.py)
 manage.py                 <- CLI alternative to the admin panel
 migrations/                <- Alembic, same pattern as the other apps here
 ```
+
+## Look and feel
+
+The **public resume** (`templates/resume.html.j2`) is its own print-style design: always light, no
+theme switch, and untouched by the shared theme - on purpose, since a dark page could put off a
+recruiter. The **admin pages** use the shared theme from `shared-assets` (sidebar, cards, icons on
+buttons) but start **light** for everyone who has not chosen (`data-theme-default="light"`); the
+theme button still offers Dark and Match my device. Set `DATABASE_URL` to point the app and the
+migrations at a copy of `access.db`.
 
 ## Editing your resume
 

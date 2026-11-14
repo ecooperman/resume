@@ -18,9 +18,10 @@ from pathlib import Path
 from typing import Literal, Optional
 
 import yaml
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
@@ -28,9 +29,25 @@ from . import config, crud, generate, render
 from .deps import get_db
 
 ADMIN_STATIC_DIR = Path(__file__).parent.parent / "admin_static"
+ADMIN_TEMPLATES_DIR = Path(__file__).parent.parent / "admin_templates"
 SITE_DIR = Path(__file__).parent.parent / "site"
 
 app = FastAPI(title="Resume Admin")
+templates = Jinja2Templates(directory=str(ADMIN_TEMPLATES_DIR))
+
+
+# The two admin pages are templates so the shared-assets URL is baked in server-side (see
+# config.SHARED_ASSETS_BASE). Registered before the static mount at the bottom, which serves
+# their app.js/style.css and so on.
+def _page(name: str):
+    def route(request: Request):
+        return templates.TemplateResponse(request, name, {"shared_assets_base": config.SHARED_ASSETS_BASE})
+
+    return route
+
+
+app.get("/", response_class=HTMLResponse)(_page("people.html"))
+app.get("/codes.html", response_class=HTMLResponse)(_page("codes.html"))
 
 
 # --- internal-only endpoints, for the time-management app's resume

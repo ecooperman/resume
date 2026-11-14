@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en" data-ui="v2" data-theme-default="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Access codes · Resume admin</title>
+  <link rel="stylesheet" href="{{ shared_assets_base }}/theme.css">
+  <script src="{{ shared_assets_base }}/theme-init.js"></script>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>Access codes</h1>
+    <p class="subtitle">
+      A code is tied to one person and unlocks their full resume (contact info + real downloads) at
+      <a href="https://resume.evancooperman.com" target="_blank" rel="noopener">resume.evancooperman.com</a>
+      - the code itself is enough, no other link parameters needed. To browse someone else's redacted public
+      version without a code, add <code>?person=&lt;slug&gt;</code> to the link instead.
+    </p>
+  </header>
+
+  <div id="app-nav-mount"></div>
+
+  <main>
+    <div id="page-message" class="page-message hidden"></div>
+
+    <button id="show-create-code" type="button" class="add-toggle" data-btn-icon="plus">Generate code</button>
+
+    <form id="create-form" class="add-card hidden">
+      <div class="field">
+        <label for="label">Label</label>
+        <input id="label" type="text" placeholder='e.g. "Acme Corp recruiter"'>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="code-person">Person</label>
+          <select id="code-person"></select>
+        </div>
+        <div class="field">
+          <label for="days">Expires in (days)</label>
+          <input id="days" type="number" min="1" placeholder="Blank = never">
+        </div>
+      </div>
+      <div class="item-actions">
+        <button type="submit" class="save-btn" data-btn-icon="zap">Generate code</button>
+        <button type="button" id="cancel-create-code" class="cancel-btn">Cancel</button>
+      </div>
+    </form>
+
+    <section>
+      <div class="list-header">
+        <h2>Codes</h2>
+        <span id="codes-count" class="list-count"></span>
+      </div>
+      <div id="codes-list" class="item-list"></div>
+      <p id="codes-empty" class="empty-state" hidden>No codes yet - generate one above.</p>
+    </section>
+  </main>
+
+  <script src="{{ shared_assets_base }}/theme.js"></script>
+  <script src="{{ shared_assets_base }}/icons.js"></script>
+  <script src="/nav.js"></script>
+  <script src="/codes.js"></script>
+</body>
+</html>

@@ -11,6 +11,7 @@ has to get right on every request. See README.md.
 Shares the same access_codes table as app/main.py/manage.py via crud.py.
 """
 import os
+import re
 import shutil
 import tempfile
 from datetime import datetime
@@ -19,35 +20,48 @@ from typing import Literal, Optional
 
 import yaml
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from shared_python import accounts_gate, oidc_login
+from shared_python.accounts_gate import Account
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from . import config, crud, generate, render
+from . import access, config, crud, generate, render, users
 from .deps import get_db
 
 ADMIN_STATIC_DIR = Path(__file__).parent.parent / "admin_static"
 ADMIN_TEMPLATES_DIR = Path(__file__).parent.parent / "admin_templates"
-SITE_DIR = Path(__file__).parent.parent / "site"
+SITE_DIR = config.SITE_DIR
 
 app = FastAPI(title="Resume Admin")
+access.install(app)  # only people with an account get in, each inside their own private data (app/access.py)
+app.include_router(users.router)
 templates = Jinja2Templates(directory=str(ADMIN_TEMPLATES_DIR))
+
+
+@app.get("/api/me")
+def get_me(request: Request, account: Account = Depends(accounts_gate.current_account)):
+    """Who is signed in, for the page header and for hiding what only an administrator may use."""
+    return {"email": account.email, "is_admin": account.is_admin, "logout_url": oidc_login.logout_url(request)}
 
 
 # The two admin pages are templates so the shared-assets URL is baked in server-side (see
 # config.SHARED_ASSETS_BASE). Registered before the static mount at the bottom, which serves
 # their app.js/style.css and so on.
-def _page(name: str):
-    def route(request: Request):
+def _page(name: str, admin_only: bool = False):
+    def route(request: Request, account: Account = Depends(accounts_gate.current_account)):
+        if admin_only and not account.is_admin:
+            return RedirectResponse("/", status_code=302)  # not for them: back to their own resume
         return templates.TemplateResponse(request, name, {"shared_assets_base": config.SHARED_ASSETS_BASE})
 
     return route
 
 
 app.get("/", response_class=HTMLResponse)(_page("people.html"))
-app.get("/codes.html", response_class=HTMLResponse)(_page("codes.html"))
+app.get("/codes.html", response_class=HTMLResponse)(_page("codes.html", admin_only=True))
+app.get("/users.html", response_class=HTMLResponse)(_page("users.html", admin_only=True))
 
 
 # --- internal-only endpoints, for the time-management app's resume
@@ -144,16 +158,15 @@ def render_cover_letter_document(body: CoverLetterRenderRequest):
         return Response(content=out_path.read_bytes(), media_type=media_type)
 
 
-# --- Resume generation: browser-facing, same Cloudflare-Access-only gating
-# as the People CRUD below. Takes uploaded source material, returns
-# generated YAML text for the admin UI to drop into the "Add person" form
-# for review/editing - never writes a Person itself (see app/generate.py's
-# docstring for why that review step matters).
+# --- Resume generation: browser-facing. Takes uploaded source material, returns generated YAML text for the admin UI to drop
+# into the "Add person" form for review/editing - never writes a Person itself (see app/generate.py's docstring for why that
+# review step matters). It spends the SERVER's Anthropic key, so only an administrator may use it for now; ordinary accounts
+# will bring their own key.
 class GenerateResumeOut(BaseModel):
     resume_yaml: str
 
 
-@app.post("/api/generate-resume", response_model=GenerateResumeOut)
+@app.post("/api/generate-resume", response_model=GenerateResumeOut, dependencies=[Depends(accounts_gate.require_admin)])
 async def generate_resume_route(
     linkedin_profile: Optional[UploadFile] = File(default=None),
     documents: list[UploadFile] = File(default=[]),
@@ -179,28 +192,24 @@ async def generate_resume_route(
     return GenerateResumeOut(resume_yaml=resume_yaml)
 
 
-# --- People: browser-facing CRUD for the admin UI (admin_static/), gated
-# only by the Cloudflare Access already covering this hostname - same
-# pattern as the access-code endpoints below, no internal token involved.
-# This is the only place resume content is ever created or edited; there is
-# deliberately no file/upload-to-disk path anywhere in this app any more.
+# --- People: browser-facing CRUD for the admin UI (admin_static/). Each account sees and changes ONLY its own resumes (the
+# owner filter, shared_python.owned, applies below these routes). An ordinary account has exactly one resume, with a slug
+# nobody chooses, never the site's default and never published; an administrator may have several, choose slugs, set the
+# default and publish. This is the only place resume content is ever created or edited; there is deliberately no
+# file/upload-to-disk path anywhere in this app any more.
 
 
 def _rebuild_person_site(person) -> None:
-    """Regenerates this one person's site/private/<slug>/ and
-    site/public/<slug>/ trees - same layout build.py (the deploy-time CLI
-    step) produces for everyone. Called after a Person create/update, since
-    editing their resume_yaml is the only thing that can change what their
-    slug-keyed tree should show - without this, an admin-UI edit would
-    silently sit in the DB and not actually appear on the live site until
-    the next git push triggers a real deploy. Switching who's *default*
-    doesn't need a rebuild at all under this layout: every person's tree
-    already exists at their own slug regardless of default status: only
-    which slug app/main.py resolves to for a bare (no ?person=) request
-    changes. Best-effort: logs and swallows a rendering failure (e.g. a
-    transient Playwright hiccup) rather than losing the Person write that
-    already succeeded - the site can always be rebuilt by hand
-    (`python build.py`) or by the next deploy either way."""
+    """Regenerates this one person's site/private/<slug>/ and site/public/<slug>/ trees - but only for a PUBLISHED person, since
+    those trees exist for the public site; anyone else's are removed. Same layout build.py (the deploy-time CLI step) produces.
+    Called after a Person create/update, since editing their resume_yaml (or publishing them) is what changes what their
+    slug-keyed tree should show. Switching who's *default* doesn't need a rebuild: every published person's tree already exists
+    at their own slug, only which slug app/main.py resolves to for a bare (no ?person=) request changes. Best-effort: logs and
+    swallows a rendering failure (e.g. a transient Playwright hiccup) rather than losing the Person write that already
+    succeeded - the site can always be rebuilt by hand (`python build.py`) or by the next deploy either way."""
+    if not person.published:
+        _remove_person_site(person.slug)
+        return
     try:
         data = yaml.safe_load(person.resume_yaml)
         render.build_tree(data, SITE_DIR / "private" / person.slug)
@@ -210,25 +219,24 @@ def _rebuild_person_site(person) -> None:
 
 
 def _remove_person_site(slug: str) -> None:
-    """Deletes a person's site/{private,public}/<slug>/ trees - called
-    after a Person delete, so a removed person doesn't leave an orphaned
-    (if harmless - no Person row means ?person=<slug> already 404s
-    regardless) directory sitting on disk indefinitely."""
+    """Deletes a person's site/{private,public}/<slug>/ trees - after a delete or an un-publish."""
     shutil.rmtree(SITE_DIR / "private" / slug, ignore_errors=True)
     shutil.rmtree(SITE_DIR / "public" / slug, ignore_errors=True)
 
 
 class PersonCreateRequest(BaseModel):
-    slug: str
+    slug: Optional[str] = None  # administrators only; everyone else gets one made for them
     name: str
     resume_yaml: str
-    is_default: bool = False
+    is_default: bool = False  # administrators only
+    published: Optional[bool] = None  # administrators only (default: published, as before accounts); never for anyone else
 
 
 class PersonUpdateRequest(BaseModel):
     name: Optional[str] = None
     resume_yaml: Optional[str] = None
-    is_default: Optional[bool] = None
+    is_default: Optional[bool] = None  # administrators only
+    published: Optional[bool] = None  # administrators only
 
 
 class PersonOut(BaseModel):
@@ -238,6 +246,7 @@ class PersonOut(BaseModel):
     slug: str
     name: str
     is_default: bool
+    published: bool = False
     created_at: datetime
     updated_at: datetime
     # resume_yaml deliberately left out of the list shape - could be a few
@@ -247,6 +256,11 @@ class PersonOut(BaseModel):
 
 class PersonDetailOut(PersonOut):
     resume_yaml: str
+
+
+def _admin_only(account: Account, what: str) -> None:
+    if not account.is_admin:
+        raise HTTPException(status_code=403, detail=f"Only an administrator can {what}")
 
 
 @app.get("/api/people", response_model=list[PersonOut])
@@ -263,9 +277,23 @@ def get_person_route(person_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/people", response_model=PersonDetailOut)
-def create_person_route(body: PersonCreateRequest, db: Session = Depends(get_db)):
+def create_person_route(
+    body: PersonCreateRequest, db: Session = Depends(get_db), account: Account = Depends(accounts_gate.current_account)
+):
+    if account.is_admin:
+        if not body.slug:
+            raise HTTPException(status_code=400, detail="Choose a slug (the short name used in the public address)")
+        slug, published = body.slug, True if body.published is None else body.published
+    else:
+        if body.slug or body.is_default or body.published:
+            _admin_only(account, "choose a slug, set the default or publish a resume")
+        if crud.list_people(db):
+            raise HTTPException(status_code=409, detail="You already have a resume - edit it instead")
+        slug, published = crud.private_slug(account.id), False
     try:
-        person = crud.create_person(db, body.slug, body.name, body.resume_yaml, body.is_default)
+        person = crud.create_person(db, slug, body.name, body.resume_yaml, body.is_default, allow_default=account.is_admin)
+        if published:
+            person = crud.update_person(db, person.id, published=True)
     except crud.PersonError as e:
         raise HTTPException(status_code=400, detail=str(e))
     _rebuild_person_site(person)
@@ -273,10 +301,14 @@ def create_person_route(body: PersonCreateRequest, db: Session = Depends(get_db)
 
 
 @app.patch("/api/people/{person_id}", response_model=PersonDetailOut)
-def update_person_route(person_id: int, body: PersonUpdateRequest, db: Session = Depends(get_db)):
+def update_person_route(
+    person_id: int, body: PersonUpdateRequest, db: Session = Depends(get_db), account: Account = Depends(accounts_gate.current_account)
+):
+    if body.is_default is not None or body.published is not None:
+        _admin_only(account, "set the default or publish a resume")
     try:
         person = crud.update_person(
-            db, person_id, name=body.name, resume_yaml=body.resume_yaml, is_default=body.is_default
+            db, person_id, name=body.name, resume_yaml=body.resume_yaml, is_default=body.is_default, published=body.published
         )
     except crud.PersonError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -299,6 +331,35 @@ def delete_person_route(person_id: int, db: Session = Depends(get_db)):
     if person is not None:
         _remove_person_site(person.slug)
     return {"ok": True}
+
+
+@app.get("/api/people/{person_id}/download")
+def download_person_route(person_id: int, format: Literal["pdf", "docx"] = "pdf", db: Session = Depends(get_db)):
+    """The signed-in person's own resume as a PDF or DOCX, with everything in it (it is theirs), rendered on the spot. Nothing is
+    written to the public site."""
+    person = crud.get_person(db, person_id)
+    if person is None:
+        raise HTTPException(status_code=404, detail="Person not found")
+    try:
+        data = yaml.safe_load(person.resume_yaml)
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            if format == "pdf":
+                render.build_pdf(data, out_dir)
+                body, media = (out_dir / "resume.pdf").read_bytes(), "application/pdf"
+            else:
+                render.build_docx(data, out_dir)
+                body = (out_dir / "resume.docx").read_bytes()
+                media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not render this resume: {e}")
+    base = re.sub(r"[^A-Za-z0-9 _-]", " ", person.name)
+    stem = re.sub(r"\s+", "_", base.strip()) or "Resume"
+    filename = f"{stem}_Resume.{format}"
+    return Response(content=body, media_type=media, headers={"Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "private, no-store"})
+
+
+# --- Access codes: administrators only. A code unlocks a PUBLISHED person's contact details on the public site.
 
 
 class CreateCodeRequest(BaseModel):
@@ -347,22 +408,24 @@ def _to_out(access_code, db: Session) -> CodeOut:
     return out
 
 
-@app.get("/api/codes", response_model=list[CodeOut])
+@app.get("/api/codes", response_model=list[CodeOut], dependencies=[Depends(accounts_gate.require_admin)])
 def list_codes(db: Session = Depends(get_db)):
     return [_to_out(c, db) for c in crud.list_codes(db)]
 
 
-@app.post("/api/codes", response_model=CodeOut)
+@app.post("/api/codes", response_model=CodeOut, dependencies=[Depends(accounts_gate.require_admin)])
 def create_code(body: CreateCodeRequest, db: Session = Depends(get_db)):
     person_id = body.person_id
     if person_id is None:
         default_person = crud.get_default_person(db)
         person_id = default_person.id if default_person else None
+    elif crud.get_person(db, person_id) is None:
+        raise HTTPException(status_code=404, detail="Person not found")
     access_code = crud.generate_code(db, label=body.label, days_valid=body.days, person_id=person_id)
     return _to_out(access_code, db)
 
 
-@app.post("/api/codes/{code_id}/revoke", response_model=CodeOut)
+@app.post("/api/codes/{code_id}/revoke", response_model=CodeOut, dependencies=[Depends(accounts_gate.require_admin)])
 def revoke_code_route(code_id: int, db: Session = Depends(get_db)):
     access_code = crud.revoke_code(db, str(code_id))
     if access_code is None:

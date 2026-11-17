@@ -4,11 +4,16 @@
 const PEOPLE_API = "/api/people";
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
+// Administrators manage the public site (slugs, the default, publishing) and may use the server's AI key; everyone else has one
+// private resume. The server enforces all of it; this only decides what to show.
+let me = { is_admin: false };
+
 function personCard(p) {
   const card = Global.el("div", { class: "item-card", "data-id": p.id });
   const summary = Global.el("button", { type: "button", class: "item-summary", "aria-expanded": "false" });
   summary.appendChild(Global.el("span", { class: "item-summary-title", text: p.name }));
-  summary.appendChild(Global.el("span", { class: "item-badge item-badge-muted", text: p.slug }));
+  if (me.is_admin) summary.appendChild(Global.el("span", { class: "item-badge item-badge-muted", text: p.slug }));
+  summary.appendChild(Global.el("span", { class: p.published ? "item-badge item-badge-accent" : "item-badge item-badge-muted", text: p.published ? "public" : "private" }));
   if (p.is_default) summary.appendChild(Global.el("span", { class: "item-badge item-badge-accent", text: "default" }));
   summary.appendChild(Global.el("span", { class: "item-chevron", "aria-hidden": "true", text: "▸" }));
 
@@ -40,6 +45,15 @@ function personEditor(p, full) {
   wrap.appendChild(Global.el("div", { class: "field" }, [Global.el("label", { text: "Resume YAML" }), yaml]));
 
   const actions = Global.el("div", { class: "item-actions" });
+  const patch = async (body, done) => {
+    try {
+      await Global.fetchJSON(`${PEOPLE_API}/${p.id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify(body) });
+      Global.showMessage(done, "success");
+      loadPeople();
+    } catch (err) {
+      Global.showMessage(err.message, "error");
+    }
+  };
   if (!p.is_default) {
     actions.appendChild(
       Global.el("button", {
@@ -58,22 +72,32 @@ function personEditor(p, full) {
         },
       })
     );
+  }
+  if (me.is_admin && !p.is_default) {
     actions.appendChild(
       Global.el("button", {
         type: "button",
         class: "secondary-btn",
         "data-btn-icon": "check",
         text: "Make default",
-        onclick: async () => {
-          try {
-            await Global.fetchJSON(`${PEOPLE_API}/${p.id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify({ is_default: true }) });
-            Global.showMessage(`"${p.name}" is now the default.`, "success");
-            loadPeople();
-          } catch (err) {
-            Global.showMessage(err.message, "error");
-          }
-        },
+        onclick: () => patch({ is_default: true }, `"${p.name}" is now the default.`),
       })
+    );
+  }
+  if (me.is_admin && !p.is_default) {
+    actions.appendChild(
+      Global.el("button", {
+        type: "button",
+        class: "secondary-btn",
+        "data-btn-icon": p.published ? "eye-off" : "eye",
+        text: p.published ? "Make private" : "Publish",
+        onclick: () => patch({ published: !p.published }, p.published ? `"${p.name}" is private again.` : `"${p.name}" is now on the public site.`),
+      })
+    );
+  }
+  for (const [format, label] of [["pdf", "PDF"], ["docx", "Word"]]) {
+    actions.appendChild(
+      Global.el("a", { class: "secondary-btn", "data-btn-icon": "download", href: `${PEOPLE_API}/${p.id}/download?format=${format}`, text: `Download ${label}` })
     );
   }
   actions.appendChild(
@@ -101,6 +125,10 @@ async function loadPeople() {
   list.replaceChildren(...people.map(personCard));
   document.getElementById("people-count").textContent = people.length ? String(people.length) : "";
   document.getElementById("people-empty").hidden = people.length !== 0;
+  // Everyone but an administrator has exactly one resume.
+  const full = !me.is_admin && people.length >= 1;
+  document.getElementById("show-add-person").classList.toggle("hidden", full);
+  if (full) document.getElementById("add-person-form").classList.add("hidden");
 }
 
 // --- add a person ---
@@ -127,16 +155,13 @@ function initAddPerson() {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     try {
-      const p = await Global.fetchJSON(PEOPLE_API, {
-        method: "POST",
-        headers: JSON_HEADERS,
-        body: JSON.stringify({
-          name: document.getElementById("person-name").value,
-          slug: document.getElementById("person-slug").value,
-          resume_yaml: document.getElementById("person-yaml").value,
-          is_default: document.getElementById("person-default").checked,
-        }),
-      });
+      const body = { name: document.getElementById("person-name").value, resume_yaml: document.getElementById("person-yaml").value };
+      if (me.is_admin) {
+        body.slug = document.getElementById("person-slug").value;
+        body.is_default = document.getElementById("person-default").checked;
+        body.published = document.getElementById("person-published").checked;
+      }
+      const p = await Global.fetchJSON(PEOPLE_API, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
       close();
       Global.showMessage(`Added "${p.name}".`, "success");
       loadPeople();
@@ -199,5 +224,26 @@ function initGenerate(openAddPerson) {
   });
 }
 
-initGenerate(initAddPerson());
-loadPeople().catch((err) => Global.showMessage(err.message, "error"));
+async function start() {
+  try {
+    me = await Global.fetchJSON("/api/me");
+  } catch (err) {
+    Global.showMessage(err.message, "error");
+  }
+  // What only an administrator may use stays out of everyone else's page.
+  for (const id of ["slug-field", "default-field", "published-field", "show-generate", "generate-form"]) {
+    document.getElementById(id).classList.toggle("admin-only-hidden", !me.is_admin);
+  }
+  if (!me.is_admin) {
+    // Everyone else has just their own, private resume: say so in their words.
+    document.querySelector(".app-header h1").textContent = "My resume";
+    document.querySelector(".app-header .subtitle").textContent = "Your resume lives here, private to you. Nobody else can see it, including the administrators.";
+    document.getElementById("people-title").textContent = "Your resume";
+    document.getElementById("show-add-person").textContent = "+ Add my resume";
+    document.getElementById("people-empty").textContent = "You haven't added your resume yet.";
+    document.getElementById("person-slug").required = false;
+  }
+  initGenerate(initAddPerson());
+  loadPeople().catch((err) => Global.showMessage(err.message, "error"));
+}
+start();

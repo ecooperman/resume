@@ -11,7 +11,7 @@
 <body>
   <header class="app-header">
     <h1>People</h1>
-    <p class="subtitle">Each person's resume lives here - never a file, never in git. The default person is who the public site and the time-management app's resume generation use.</p>
+    <p class="subtitle">Each person's resume lives here - never a file, never in git, and private to whoever owns it. For administrators: the default person is who the public site and the time-management app's resume generation use, and only a published person can be seen on the public site.</p>
   </header>
 
   <div id="app-nav-mount"></div>
@@ -27,7 +27,7 @@
           <label for="person-name">Name <span class="required">*</span></label>
           <input id="person-name" type="text" required placeholder="e.g. Rach">
         </div>
-        <div class="field">
+        <div class="field" id="slug-field">
           <label for="person-slug">Slug <span class="required">*</span></label>
           <input id="person-slug" type="text" required placeholder="e.g. rach (lowercase, no spaces)">
         </div>
@@ -36,9 +36,13 @@
         <label for="person-yaml">Resume YAML <span class="required">*</span></label>
         <textarea id="person-yaml" class="yaml" rows="8" required placeholder="Paste resume YAML here (it must have a top-level 'basics' key), or use Generate from documents"></textarea>
       </div>
-      <div class="field checkbox-field">
+      <div class="field checkbox-field" id="default-field">
         <input id="person-default" type="checkbox">
         <label for="person-default">Make this the default</label>
+      </div>
+      <div class="field checkbox-field" id="published-field">
+        <input id="person-published" type="checkbox" checked>
+        <label for="person-published">Show on the public site</label>
       </div>
       <div class="item-actions">
         <button type="submit" class="save-btn">Add person</button>
@@ -77,7 +81,7 @@
 
     <section>
       <div class="list-header">
-        <h2>People</h2>
+        <h2 id="people-title">People</h2>
         <span id="people-count" class="list-count"></span>
       </div>
       <div id="people-list" class="item-list"></div>

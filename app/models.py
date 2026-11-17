@@ -1,11 +1,28 @@
 from datetime import datetime
 
+from shared_python import owned
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 
 from .database import Base
 
+USER_ACTIVE = "active"
+USER_REMOVED = "removed"
 
-class Person(Base):
+
+class User(Base):
+    """Someone with an account in the resume app. An administrator lets them in on the Users page (default-deny: signing in
+    is not enough) or, for an administrator, the account is made on their first sign-in (taking over the resumes that existed
+    before accounts). Everything below belongs to one User (owned.OwnedMixin) and stays private to them."""
+
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String, unique=True, nullable=False)
+    status = Column(String, nullable=False, default=USER_ACTIVE, server_default=USER_ACTIVE)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Person(Base, owned.OwnedMixin):
     """One resume, uploaded/edited entirely through the admin UI - never a
     file in this repo, never in git. `resume_yaml` is the raw YAML text
     (same shape render.py expects), stored directly in access.db (already
@@ -24,11 +41,15 @@ class Person(Base):
     name = Column(String, nullable=False)
     resume_yaml = Column(Text, nullable=False)
     is_default = Column(Boolean, nullable=False, default=False)
+    # Only a published person can be seen on the public site (app/main.py): anyone's resume is private to its owner
+    # unless an administrator has published it. Everything that existed before accounts was already public, so the
+    # migration publishes it; every new person starts unpublished.
+    published = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
-class AccessCode(Base):
+class AccessCode(Base, owned.OwnedMixin):
     """A capability token that unlocks the full resume (contact info +
     unredacted downloads) when passed as ?code=... on any route.
 

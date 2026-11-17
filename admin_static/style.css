@@ -74,3 +74,8 @@ textarea.yaml {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12.5px;
 }
+
+/* Things only an administrator may use are removed from everyone else's page (the server refuses them too). */
+.admin-only-hidden {
+  display: none !important;
+}

@@ -9,3 +9,4 @@ alembic==1.20.0
 anthropic
 pypdf
 python-multipart
+-e ../shared-python

@@ -19,6 +19,26 @@ manage.py                 <- CLI alternative to the admin panel
 migrations/                <- Alembic, same pattern as the other apps here
 ```
 
+## Accounts (several people, each with a private resume)
+
+The admin app (`app/admin.py`, port 8041) has accounts, like plans, time and finances: default-deny (signing in is not enough; an administrator
+lets people in on the Users page or the dashboard's People page), every resume and access code is owned by one account and filtered to it below the routes
+(`shared_python.owned`), and `shared_python.accounts_gate` wraps the whole app. Administrators are `ADMIN_EMAILS`.
+
+- **An ordinary account** has exactly one resume, with a slug nobody chooses (`u<id>-<random>`), never the site's default, never published. It can edit it,
+  download a PDF or Word copy (rendered on the spot, with everything in it), and delete it. It cannot see anyone else's, and neither can an administrator.
+- **An administrator** can have several resumes, choose slugs, set the default, publish and un-publish, create access codes, and use the server's Anthropic key
+  for "Generate a resume.yaml from documents" (ordinary accounts will bring their own key in a later phase).
+- **Published** (`people.published`): the public site (`app/main.py`, port 8040, no sign-in) only ever shows a resume that is published, by `?person=`, as the
+  default, or through an access code; anything else is a 404 exactly like an unknown slug. The migration published every existing resume (they were all public);
+  new ones start unpublished (an administrator's form has a "Show on the public site" tick, on by default). `build.py` only builds published people.
+- **time-management's calls** (`/api/resume-people`, `/api/resume-data`, `/api/render`, `/api/render-cover-letter`) carry no sign-in, only `X-Internal-Token`, and act
+  as the first administrator; nothing else accepts that token.
+- The command-line tools (`manage.py`, `build.py`) are the operator at the keyboard, so they look past the per-person filter on purpose (`owned.unscoped()`);
+  `manage.py seed-person` takes `--owner <email>` (default: the first administrator), and only an administrator's resume can ever be the default.
+- Tests: `pytest` (no browser needed; PDF and Word rendering are replaced by tiny stand-ins). They include a two-person test that calls every route against another
+  person's resume, a sweep of every route signed out and as a stranger, the public-site rules, and the migration on realistic old data.
+
 ## Look and feel
 
 The **public resume** (`templates/resume.html.j2`) is its own print-style design: always light, no
@@ -155,7 +175,7 @@ link is just `?code=<token>` - no `?person=` needed, since the code already
 says who it's for.
 
 **Admin panel** (day-to-day way to manage codes): `resume-admin.evancooperman.com`,
-behind the normal Cloudflare Access login like your other apps. Pick who a
+behind the dashboard sign-in like the other apps (or, until the cutover in `DEPLOYMENT.md`, Cloudflare Access). Pick who a
 new code is for, create it, copy the shareable link, and revoke, all from
 the browser - no SSH needed.
 

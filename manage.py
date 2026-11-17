@@ -30,32 +30,41 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from app import crud
+from shared_python import owned
+
+from app import config, crud, models
 from app.database import SessionLocal
 
 SITE_URL = "https://resume.evancooperman.com"
 
 
+# This tool is the operator at the keyboard on the server (not a signed-in person), so it looks past the per-person filter on
+# purpose, with `owned.unscoped()`. Anything it creates is put in the right owner's scope explicitly.
+
+
 def cmd_create(args):
     db = SessionLocal()
     try:
-        if args.person:
-            person = crud.get_person_by_slug(db, args.person)
-            if person is None:
-                print(f"error: no person with slug {args.person!r}", file=sys.stderr)
-                sys.exit(1)
-        else:
-            person = crud.get_default_person(db)
-            if person is None:
-                print("error: no default person is set up yet - add one via the admin UI first", file=sys.stderr)
-                sys.exit(1)
-        access_code = crud.generate_code(db, label=args.label, days_valid=args.days, person_id=person.id)
+        with owned.unscoped():
+            if args.person:
+                person = db.query(models.Person).filter(models.Person.slug == args.person).first()
+                if person is None:
+                    print(f"error: no person with slug {args.person!r}", file=sys.stderr)
+                    sys.exit(1)
+            else:
+                person = db.query(models.Person).filter(models.Person.is_default.is_(True)).first()
+                if person is None:
+                    print("error: no default person is set up yet - add one via the admin UI first", file=sys.stderr)
+                    sys.exit(1)
+            owner_id, person_id, person_name = person.owner_id, person.id, person.name
+        with owned.scope(owner_id):  # the code belongs to whoever owns the person it unlocks
+            access_code = crud.generate_code(db, label=args.label, days_valid=args.days, person_id=person_id)
         # No ?person=<slug> needed - the code is tied to person.id directly
         # and app/main.py looks that up first, so it's authoritative on its
         # own regardless of who's currently the default (see
         # app/models.AccessCode's docstring).
         url = f"{SITE_URL}/?code={access_code.code}"
-        print(f"Created code for: {access_code.label or '(no label)'} (person: {person.name})")
+        print(f"Created code for: {access_code.label or '(no label)'} (person: {person_name})")
         print(f"  expires: {access_code.expires_at or 'never'}")
         print(f"  URL: {url}")
     finally:
@@ -65,7 +74,8 @@ def cmd_create(args):
 def cmd_list(args):
     db = SessionLocal()
     try:
-        codes = crud.list_codes(db)
+        with owned.unscoped():
+            codes = crud.list_codes(db)
         if not codes:
             print("No codes yet.")
             return
@@ -77,7 +87,8 @@ def cmd_list(args):
             else:
                 status = "active"
             last_used = f", last used {c.last_used_at:%Y-%m-%d}" if c.last_used_at else ""
-            person = crud.get_person(db, c.person_id) if c.person_id is not None else None
+            with owned.unscoped():
+                person = db.query(models.Person).filter(models.Person.id == c.person_id).first() if c.person_id is not None else None
             person_bit = f" [{person.name}]" if person else " [no person - pre-migration?]"
             print(f"[{c.id}] {c.label or '(no label)':30s}{person_bit} {status:20s} used {c.use_count}x{last_used}")
             print(f"      {c.code}")
@@ -88,7 +99,8 @@ def cmd_list(args):
 def cmd_revoke(args):
     db = SessionLocal()
     try:
-        row = crud.revoke_code(db, args.code_or_id)
+        with owned.unscoped():
+            row = crud.revoke_code(db, args.code_or_id)
         if row is None:
             print(f"No active code matching '{args.code_or_id}' found.", file=sys.stderr)
             sys.exit(1)
@@ -101,8 +113,16 @@ def cmd_seed_person(args):
     db = SessionLocal()
     try:
         resume_yaml = Path(args.file).read_text()
+        owner_email = crud.normalize_email(args.owner or (sorted(config.ADMIN_EMAILS)[0] if config.ADMIN_EMAILS else ""))
+        with owned.unscoped():
+            owner = crud.adopt_or_create_admin(db, owner_email) if owner_email in config.ADMIN_EMAILS else crud.get_user_by_email(db, owner_email)
+        if owner is None:
+            print(f"error: {owner_email or 'no owner'!r} has no account - let them in via the admin UI first, or pass --owner", file=sys.stderr)
+            sys.exit(1)
         try:
-            person = crud.create_person(db, args.slug, args.name, resume_yaml, is_default=args.default)
+            with owned.scope(owner.id):
+                # Only an administrator's resume can ever be the site's default (and the public front page).
+                person = crud.create_person(db, args.slug, args.name, resume_yaml, is_default=args.default, allow_default=owner_email in config.ADMIN_EMAILS)
         except crud.PersonError as e:
             print(f"error: {e}", file=sys.stderr)
             sys.exit(1)
@@ -135,6 +155,7 @@ def main():
     p_seed.add_argument("--name", required=True, help='Display name, e.g. "Evan Cooperman"')
     p_seed.add_argument("--file", required=True, help="Path to the existing resume yaml file to load")
     p_seed.add_argument("--default", action="store_true", help="Make this the default person")
+    p_seed.add_argument("--owner", help="Email of the account that owns it (default: the first administrator)")
     p_seed.set_defaults(func=cmd_seed_person)
 
     args = parser.parse_args()

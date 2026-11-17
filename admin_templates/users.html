@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en" data-ui="v2" data-theme-default="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Users · Resume</title>
+  <link rel="stylesheet" href="{{ shared_assets_base }}/theme.css">
+  <script src="{{ shared_assets_base }}/theme-init.js"></script>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>Users</h1>
+  </header>
+
+  <div id="app-nav-mount"></div>
+
+  <main>
+    <div id="page-message" class="page-message hidden"></div>
+
+    <section class="section">
+      <h2>Add someone</h2>
+      <p class="field-hint">Lets them into Resume: they can create an account (a passkey is quickest) and are emailed how. Only administrators can invite. Everyone's resume is completely private to them, and you can't see anyone else's. Adding someone you removed restores them. (The dashboard's People page does the same for every app at once.)</p>
+      <div id="add-user"></div>
+    </section>
+
+    <section class="section">
+      <h2>People with access</h2>
+      <p class="field-hint">Removing someone only stops them using Resume. What they own stays private and untouched until you delete it, and restoring them puts everything back.</p>
+      <div id="active-users" class="request-list"></div>
+    </section>
+
+    <section id="removed-section" class="section hidden">
+      <h2>Removed</h2>
+      <p class="field-hint">These people can't sign in to Resume. Deleting their data erases every resume and access code they own and can't be undone; their email stays here, removed.</p>
+      <div id="removed-users" class="request-list"></div>
+    </section>
+  </main>
+
+  <script src="{{ shared_assets_base }}/theme.js"></script>
+  <script src="{{ shared_assets_base }}/icons.js"></script>
+  <script src="/nav.js"></script>
+  <script src="/users.js"></script>
+</body>
+</html>

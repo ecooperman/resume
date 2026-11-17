@@ -17,6 +17,10 @@ site/public/<slug>/ and site/private/<slug>/ (or by app/admin.py directly,
 right after an admin-UI edit to that person); this app just decides which
 pre-built file to hand back and records that a code was used. No PDF/DOCX
 generation happens per-request.
+
+Nobody signs in here, on purpose, so this app has NO per-person filter: it only ever shows a person an administrator has
+published (crud.public_*), and a person nobody published is a 404 exactly like one that does not exist. The admin app
+(app/admin.py) is where accounts live.
 """
 import re
 from pathlib import Path
@@ -46,13 +50,13 @@ def _resolve(person_slug: Optional[str], code: Optional[str], db: Session):
     if code:
         access_code = crud.get_valid_code(db, code)
         if access_code is not None and access_code.person_id is not None:
-            person = crud.get_person(db, access_code.person_id)
+            person = crud.public_person_by_id(db, access_code.person_id)  # a code never shows a resume that is not published
             if person is not None:
                 crud.touch_code(db, access_code)
                 return person, SITE_DIR / "private" / person.slug
     # No code, or one that didn't resolve to a real person - public
     # browsing by slug (or the default person if none given).
-    person = crud.get_person_by_slug(db, person_slug) if person_slug else crud.get_default_person(db)
+    person = crud.public_person_by_slug(db, person_slug) if person_slug else crud.public_default_person(db)
     if person is None:
         raise HTTPException(status_code=404, detail="No such person")
     return person, SITE_DIR / "public" / person.slug

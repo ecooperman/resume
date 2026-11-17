@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Single build step: every person (see app/models.Person) -> two parallel
+Single build step: every PUBLISHED person (see app/models.Person) -> two parallel
 trees each, keyed by slug:
 
     site/private/<slug>/   full data, including contact info
@@ -37,7 +37,7 @@ from pathlib import Path
 
 import yaml
 
-from app.crud import list_people
+from app.crud import published_people
 from app.database import SessionLocal
 from app.render import build_tree, redact
 
@@ -54,7 +54,7 @@ def build_person(person) -> None:
 def main():
     db = SessionLocal()
     try:
-        people = list_people(db)
+        people = published_people(db)  # only what belongs on the public site
     finally:
         db.close()
     if not people:

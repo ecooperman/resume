@@ -194,6 +194,11 @@ textarea.yaml {
   color: var(--danger);
 }
 
+.keep-warning {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .chip {
   display: inline-block;
   margin: 0 4px 4px 0;

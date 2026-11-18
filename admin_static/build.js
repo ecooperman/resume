@@ -299,19 +299,25 @@ function renderFound() {
 
 // --- keeping or not keeping the files ---------------------------------------------------------------------------------------------
 
+function draftOpen() {
+  return !$("step-review").classList.contains("hidden");
+}
+
 function renderKeep() {
   $("keep-files").checked = keep;
+  $("keep-hint").classList.toggle("keep-warning", !keep);
   $("keep-hint").textContent = keep
     ? "On: your files' text and your draft are saved, so you can come back and update your resume without adding anything again."
-    : "Off: nothing from your files is saved. They are held in this page only, so refreshing it means adding them again and starting the draft over. Your engagements and notes are still saved.";
+    : "Warning: keeping is off. Your files and draft are held in this page only. If you refresh or leave it, they are lost and you start over. Your engagements and notes are still saved.";
   renderFound();
 }
 
 async function changeKeep() {
   const wanted = $("keep-files").checked;
-  if (!wanted && (sources.length || !$("step-review").classList.contains("hidden"))) {
-    const kept = sources.length ? `the ${sources.length} file${sources.length === 1 ? "" : "s"} saved on your account and ` : "";
-    if (!confirm(`Turning this off deletes ${kept}your saved draft. A refresh will then start you over. Continue?`)) {
+  if (!wanted) {
+    // Always asked, even with nothing saved yet: this is the one switch that makes a refresh lose everything.
+    const saved = sources.length ? `This deletes the ${sources.length} file${sources.length === 1 ? "" : "s"} saved on your account${draftOpen() ? " and your saved draft" : ""}. ` : draftOpen() ? "This deletes your saved draft. " : "";
+    if (!confirm(`Turn off keeping your files?\n\n${saved}From now on your files and draft are held in this page only. If you refresh or leave it, they are lost and you start over.\n\nYour engagements and notes are still saved.`)) {
       $("keep-files").checked = true;
       return;
     }

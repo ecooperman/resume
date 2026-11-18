@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from shared_python import owned
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 
 from .database import Base
 
@@ -83,3 +83,57 @@ class AccessCode(Base, owned.OwnedMixin):
     revoked_at = Column(DateTime, nullable=True)
     last_used_at = Column(DateTime, nullable=True)
     use_count = Column(Integer, default=0, nullable=False)
+
+
+class UserApiKey(Base, owned.OwnedMixin):
+    """A person's own key for a paid service (today only Anthropic, which drafts a resume from their documents). Each person
+    brings their own, so nobody is metered on the owner's bill; saved encrypted (shared_python.keystore) and never sent back to
+    the browser - only the last four characters are kept in the clear. Private to its owner like everything else here."""
+
+    __tablename__ = "user_api_keys"
+    __table_args__ = (UniqueConstraint("owner_id", "provider", name="uq_user_api_keys_owner_provider"),)
+
+    id = Column(Integer, primary_key=True)
+    provider = Column(String, nullable=False)
+    encrypted_key = Column(Text, nullable=False)
+    last4 = Column(String, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class Engagement(Base, owned.OwnedMixin):
+    """One piece of client or project work a person describes in the builder: who it was for, what they do, the industry,
+    whether it was regulated, what was used, the person's role and what came of it. Kept here (not just inside a drafted
+    resume) so every later draft can use it: when LinkedIn or the resume changes, the person updates the resume and these come
+    along, instead of being typed again. They are never printed on the resume; they ride in resume.yaml as an optional
+    `engagements:` list under the matching job, where a later step can use them to tailor the resume to a job."""
+
+    __tablename__ = "engagements"
+
+    id = Column(Integer, primary_key=True)
+    employer = Column(String, nullable=False, default="", server_default="")  # which job it belongs to (the company, as on the resume)
+    client = Column(String, nullable=False)
+    client_does = Column(String, nullable=False, default="", server_default="")
+    industry = Column(String, nullable=False, default="", server_default="")
+    regulated = Column(String, nullable=False, default="unknown", server_default="unknown")  # "yes", "no" or "unknown"
+    regulators = Column(String, nullable=False, default="", server_default="")  # who regulates it (HIPAA, SOX...), when regulated
+    technologies = Column(Text, nullable=False, default="[]", server_default="[]")  # a JSON list of names
+    role = Column(String, nullable=False, default="", server_default="")
+    start = Column(String, nullable=False, default="", server_default="")
+    end = Column(String, nullable=False, default="", server_default="")
+    outcomes = Column(Text, nullable=False, default="[]", server_default="[]")  # a JSON list of short statements
+    confidential = Column(Boolean, nullable=False, default=False, server_default="0")  # do not name the client on anything printed
+    position = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class BuilderNotes(Base, owned.OwnedMixin):
+    """The free-text notes a person gives the builder ("leave out my first job", "I want product roles"), kept so a later update
+    uses them too. One row per person."""
+
+    __tablename__ = "builder_notes"
+    __table_args__ = (UniqueConstraint("owner_id", name="uq_builder_notes_owner"),)
+
+    id = Column(Integer, primary_key=True)
+    notes = Column(Text, nullable=False, default="", server_default="")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

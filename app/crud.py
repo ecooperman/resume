@@ -305,5 +305,8 @@ def delete_user_data(db: Session, user_id: int) -> dict:
         slugs = [slug for (slug,) in db.query(models.Person.slug).all()]
         codes = db.query(models.AccessCode).delete(synchronize_session=False)
         people = db.query(models.Person).delete(synchronize_session=False)
+        keys = db.query(models.UserApiKey).delete(synchronize_session=False)
+        engagements = db.query(models.Engagement).delete(synchronize_session=False)
+        db.query(models.BuilderNotes).delete(synchronize_session=False)
         db.commit()
-    return {"people": people, "codes": codes, "slugs": slugs}
+    return {"people": people, "codes": codes, "keys": keys, "engagements": engagements, "slugs": slugs}

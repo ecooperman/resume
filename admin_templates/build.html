@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en" data-ui="v2" data-theme-default="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Build my resume · Resume</title>
+  <link rel="stylesheet" href="{{ shared_assets_base }}/theme.css">
+  <script src="{{ shared_assets_base }}/theme-init.js"></script>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>Build my resume</h1>
+    <p class="subtitle">Bring what you already have (your LinkedIn data and old resumes), tell us about the work behind them, and a first draft is written for you to check and fix. Nothing is published, and the draft is yours alone.</p>
+  </header>
+
+  <div id="app-nav-mount"></div>
+
+  <main>
+    <div id="page-message" class="page-message hidden"></div>
+
+    <section class="step" id="step-privacy">
+      <h2><span class="step-num" aria-hidden="true">i</span>What happens to your files</h2>
+      <ul class="plain-list">
+        <li>Your files are read on our server, in memory, and <strong>never stored</strong>.</li>
+        <li>Their text is sent to <strong>Anthropic</strong> (the company behind Claude) to write the draft, using <strong>your own</strong> account key, so the cost is on your account and not ours. A draft usually costs a few cents.</li>
+        <li>From LinkedIn's data we read only the career parts (profile, positions, education, skills, certifications, projects). Your connections, messages and everything else in that file are never opened.</li>
+        <li>The draft is shown to you first. It only becomes your resume when you press Save, and it stays private to you.</li>
+      </ul>
+    </section>
+
+    <section class="step" id="step-key">
+      <h2><span class="step-num" aria-hidden="true">1</span>Your Anthropic key <span id="key-done" class="step-done hidden">done</span></h2>
+      <div id="key-body"></div>
+    </section>
+
+    <section class="step" id="step-linkedin">
+      <h2><span class="step-num" aria-hidden="true">2</span>Your LinkedIn data <span class="step-optional">best source</span></h2>
+      <ol class="steps-list">
+        <li>
+          <a class="secondary-btn" data-btn-icon="external" href="https://www.linkedin.com/mypreferences/d/download-my-data" target="_blank" rel="noopener noreferrer">Open LinkedIn's data download page</a>
+          <span class="hint">(you need to be signed in to LinkedIn)</span>
+        </li>
+        <li>Under <em>Want something in particular?</em>, tick <strong>Profile, Positions, Education, Skills, Certifications</strong> and <strong>Projects</strong> (or take the whole archive, we only read those), then press <strong>Request archive</strong> and confirm your password.</li>
+        <li>LinkedIn emails you a link, usually within ten minutes, sometimes up to a day. Download the <strong>ZIP</strong> and leave it zipped.</li>
+        <li>Drop the ZIP here, or choose it.</li>
+      </ol>
+      <div id="drop-linkedin"></div>
+      <p class="hint">Can't wait for LinkedIn's email? Skip this: old resumes in the next step, and the notes at the end, are enough to start.</p>
+    </section>
+
+    <section class="step" id="step-resumes">
+      <h2><span class="step-num" aria-hidden="true">3</span>Your old resumes <span class="step-optional">optional</span></h2>
+      <p class="hint">Every version you still have helps: PDF, Word or plain text. The more you add, the more complete the draft (it keeps the richest wording of each job).</p>
+      <div id="drop-resumes"></div>
+    </section>
+
+    <section class="step" id="step-found">
+      <h2><span class="step-num" aria-hidden="true">&#10003;</span>What we found</h2>
+      <div id="found"></div>
+    </section>
+
+    <section class="step" id="step-work">
+      <h2><span class="step-num" aria-hidden="true">4</span>About your work <span class="step-optional">optional, very useful later</span></h2>
+      <p class="hint">For each client or project, tell us who it was for, what they do, the industry, whether it was regulated, what you used and what came of it. These are <strong>saved to your account</strong> (private to you) and used every time a draft is written, so when your LinkedIn or resume changes you update it and these come along. They aren't printed on your resume; they let it be tailored to a job later (for example "regulated healthcare" or "Kubernetes").</p>
+      <div id="engagements"></div>
+      <div id="engagement-form"></div>
+      <button type="button" id="add-engagement" class="add-toggle">+ Add an engagement</button>
+    </section>
+
+    <section class="step" id="step-draft">
+      <h2><span class="step-num" aria-hidden="true">5</span>Anything else, then draft</h2>
+      <div class="field">
+        <label for="notes">Notes <span class="step-optional">optional, saved with your account</span></label>
+        <textarea id="notes" rows="4" maxlength="5000" placeholder="Anything we should know: roles to leave out, the kind of job you want, work that isn't on LinkedIn..."></textarea>
+        <span id="notes-status" class="status" role="status"></span>
+      </div>
+      <div id="mode" class="field"></div>
+      <div class="item-actions">
+        <button type="button" id="draft-btn" class="save-btn" data-btn-icon="zap">Draft my resume</button>
+        <span id="draft-status" class="status" role="status"></span>
+      </div>
+      <p id="draft-why" class="hint"></p>
+    </section>
+
+    <section class="step hidden" id="step-review">
+      <h2><span class="step-num" aria-hidden="true">6</span>Check it, fix it, save it</h2>
+      <p class="hint">This is a first draft written by an AI, so read it. Change anything in the box on the left; the summary on the right follows as you type. Nothing is saved until you press Save.</p>
+      <div class="review-grid">
+        <div class="field">
+          <label for="draft-yaml">Your resume (YAML)</label>
+          <textarea id="draft-yaml" class="yaml" rows="28" spellcheck="false"></textarea>
+        </div>
+        <div>
+          <label>What it says</label>
+          <div id="preview" class="preview"></div>
+        </div>
+      </div>
+      <div id="diff-box" class="hidden">
+        <label>What this update changes</label>
+        <pre id="diff" class="diff"></pre>
+      </div>
+      <div id="save-fields" class="field-row"></div>
+      <div class="item-actions">
+        <button type="button" id="save-btn" class="save-btn">Save</button>
+        <span id="save-status" class="status" role="status"></span>
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ shared_assets_base }}/theme.js"></script>
+  <script src="{{ shared_assets_base }}/icons.js"></script>
+  <script src="/nav.js"></script>
+  <script src="/build.js"></script>
+</body>
+</html>

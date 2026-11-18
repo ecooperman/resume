@@ -1,5 +1,5 @@
 // The People page: each person as an accordion card (their resume YAML inside), plus the forms
-// for adding someone and for drafting a resume.yaml from documents. Needs Global (shared-assets).
+// for adding someone (drafting one from documents is the Build my resume page, build.js). Needs Global (shared-assets).
 
 const PEOPLE_API = "/api/people";
 const JSON_HEADERS = { "Content-Type": "application/json" };
@@ -172,58 +172,6 @@ function initAddPerson() {
   return open;
 }
 
-// --- draft a resume.yaml from documents ---
-
-function initGenerate(openAddPerson) {
-  const form = document.getElementById("generate-form");
-  const showBtn = document.getElementById("show-generate");
-  const status = document.getElementById("gen-status");
-  const genBtn = document.getElementById("gen-btn");
-
-  function close() {
-    form.reset();
-    form.classList.add("hidden");
-    showBtn.classList.remove("hidden");
-  }
-  showBtn.addEventListener("click", () => {
-    form.classList.remove("hidden");
-    showBtn.classList.add("hidden");
-  });
-  document.getElementById("cancel-generate").addEventListener("click", close);
-
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const linkedin = document.getElementById("gen-linkedin-file").files[0];
-    const docs = document.getElementById("gen-docs-files").files;
-    if (!linkedin && docs.length === 0) {
-      Global.showMessage("Add a LinkedIn export and/or at least one document first.", "error");
-      return;
-    }
-    const data = new FormData();
-    if (linkedin) data.append("linkedin_profile", linkedin);
-    for (const f of docs) data.append("documents", f);
-    data.append("notes", document.getElementById("gen-notes").value);
-
-    genBtn.disabled = true;
-    status.textContent = "Generating - this can take 20-60 seconds…";
-    try {
-      // No Content-Type header on purpose: the browser sets the multipart boundary itself.
-      const result = await Global.fetchJSON("/api/generate-resume", { method: "POST", body: data });
-      close();
-      openAddPerson();
-      const yaml = document.getElementById("person-yaml");
-      yaml.value = result.resume_yaml;
-      yaml.scrollIntoView({ behavior: "smooth", block: "center" });
-      Global.showMessage("Generated - review the YAML below, fill in a name and slug, then Add person.", "success");
-    } catch (err) {
-      Global.showMessage(err.message, "error");
-    } finally {
-      genBtn.disabled = false;
-      status.textContent = "";
-    }
-  });
-}
-
 async function start() {
   try {
     me = await Global.fetchJSON("/api/me");
@@ -231,7 +179,7 @@ async function start() {
     Global.showMessage(err.message, "error");
   }
   // What only an administrator may use stays out of everyone else's page.
-  for (const id of ["slug-field", "default-field", "published-field", "show-generate", "generate-form"]) {
+  for (const id of ["slug-field", "default-field", "published-field"]) {
     document.getElementById(id).classList.toggle("admin-only-hidden", !me.is_admin);
   }
   if (!me.is_admin) {
@@ -243,7 +191,7 @@ async function start() {
     document.getElementById("people-empty").textContent = "You haven't added your resume yet.";
     document.getElementById("person-slug").required = false;
   }
-  initGenerate(initAddPerson());
+  initAddPerson();
   loadPeople().catch((err) => Global.showMessage(err.message, "error"));
 }
 start();

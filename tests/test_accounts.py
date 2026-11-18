@@ -121,7 +121,7 @@ def test_nobody_signed_out_gets_anything(person, people):
         resp = signed_out.request(method, fill(shown, {}), json={} if method in ("POST", "PATCH", "PUT") else None)
         if resp.status_code not in (401, 302):
             answered.append((method, shown, resp.status_code))
-    for path in ("/", "/codes.html", "/users.html", "/people.js", "/style.css", "/nope"):
+    for path in ("/", "/build.html", "/build.js", "/codes.html", "/users.html", "/people.js", "/style.css", "/nope"):
         if signed_out.get(path).status_code != 302:
             answered.append(("GET", path))
     assert not answered, answered
@@ -284,8 +284,8 @@ def test_only_an_administrator_may_use_codes_the_users_page_and_the_servers_ai_k
         ("DELETE", f"/api/users/{people['eve']}/data", None), ("GET", "/api/users/suggestions", None),
     ):
         assert bob.request(method, path, json=body).status_code == 403, (method, path)
-    gen = bob.post("/api/generate-resume", files={"documents": ("a.txt", b"hello")})
-    assert gen.status_code == 403  # it would spend the server's key
+    gen = bob.post("/api/generate-resume", files={"sources": ("a.txt", b"hello")})
+    assert gen.status_code == 400 and "your own Anthropic key" in gen.json()["detail"]  # it would spend the server's key
 
 
 def test_ordinary_accounts_are_sent_back_to_their_own_resume_from_the_administrators_pages(person, people):

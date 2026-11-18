@@ -85,7 +85,7 @@ def test_deleting_a_removed_persons_data_deletes_exactly_theirs_and_their_built_
     assert admin_client.delete(f"{URL}/{bob_id}/data").status_code == 409  # not removed yet
     admin_client.patch(f"{URL}/{bob_id}", json={"status": "removed"})
     deleted = admin_client.delete(f"{URL}/{bob_id}/data").json()["deleted"]
-    assert deleted == {"people": 1, "codes": 1}
+    assert deleted == {"people": 1, "codes": 1, "keys": 0, "engagements": 0}
     assert not (site_dir / "public" / bob_slug).exists() and not (site_dir / "private" / bob_slug).exists()
     assert (site_dir / "public" / "owner").exists()  # the administrator's files stay
     assert [p["name"] for p in client_as("carol@example.com").get("/api/people").json()] == ["Carol"]

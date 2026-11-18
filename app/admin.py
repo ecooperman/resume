@@ -10,6 +10,7 @@ has to get right on every request. See README.md.
 
 Shares the same access_codes table as app/main.py/manage.py via crud.py.
 """
+import difflib
 import os
 import re
 import shutil
@@ -28,7 +29,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from . import access, config, crud, generate, render, users
+from . import access, apikeys, builder, config, crud, generate, limits, render, users
 from .deps import get_db
 
 ADMIN_STATIC_DIR = Path(__file__).parent.parent / "admin_static"
@@ -60,6 +61,7 @@ def _page(name: str, admin_only: bool = False):
 
 
 app.get("/", response_class=HTMLResponse)(_page("people.html"))
+app.get("/build.html", response_class=HTMLResponse)(_page("build.html"))
 app.get("/codes.html", response_class=HTMLResponse)(_page("codes.html", admin_only=True))
 app.get("/users.html", response_class=HTMLResponse)(_page("users.html", admin_only=True))
 
@@ -158,37 +160,194 @@ def render_cover_letter_document(body: CoverLetterRenderRequest):
         return Response(content=out_path.read_bytes(), media_type=media_type)
 
 
-# --- Resume generation: browser-facing. Takes uploaded source material, returns generated YAML text for the admin UI to drop
-# into the "Add person" form for review/editing - never writes a Person itself (see app/generate.py's docstring for why that
-# review step matters). It spends the SERVER's Anthropic key, so only an administrator may use it for now; ordinary accounts
-# will bring their own key.
+# --- The builder: browser-facing. Takes what a person uploads, drafts a resume.yaml for the page to show for review, and
+# never writes a Person itself (see app/generate.py for why that review step matters). It spends the PERSON'S OWN Anthropic key
+# (an administrator may fall back to the server's), uploads are read in memory and never stored, and each person is limited to a
+# few drafts an hour (app/limits.py).
+
+
+class ApiKeyIn(BaseModel):
+    key: str
+
+
+class ApiKeySaved(BaseModel):
+    status: dict
+    verified: Optional[bool]
+    note: str = ""
+
+
+@app.get("/api/api-key")
+def api_key_status(account: Account = Depends(accounts_gate.current_account), db: Session = Depends(get_db)):
+    return apikeys.status(db, account.is_admin)
+
+
+@app.put("/api/api-key", response_model=ApiKeySaved)
+def save_api_key(body: ApiKeyIn, account: Account = Depends(accounts_gate.current_account), db: Session = Depends(get_db)):
+    """Check the key with Anthropic, then store it encrypted. A key Anthropic refuses is not saved; one that could not be
+    checked (Anthropic was unreachable) is saved and reported as unverified."""
+    if not apikeys.storage_available():
+        raise HTTPException(status_code=503, detail="Saving keys isn't set up on the server yet - ask the administrator")
+    try:
+        key = apikeys.clean(body.key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    verified, why = apikeys.verify(key)
+    if verified is False:
+        raise HTTPException(status_code=400, detail=why)
+    apikeys.save(db, key)
+    return ApiKeySaved(status=apikeys.status(db, account.is_admin), verified=verified, note="" if verified else f"Saved, but not verified: {why}.")
+
+
+@app.delete("/api/api-key")
+def remove_api_key(account: Account = Depends(accounts_gate.current_account), db: Session = Depends(get_db)):
+    if not apikeys.remove(db):
+        raise HTTPException(status_code=404, detail="You haven't saved a key")
+    return apikeys.status(db, account.is_admin)
+
+
+def _read_uploads(uploads: list[UploadFile]) -> list[tuple[str, bytes]]:
+    """The named files, each read up to one byte past the limit (so an oversize one is refused, not silently cut)."""
+    return [(Path(u.filename).name, u.file.read(generate.MAX_FILE_BYTES + 1)) for u in uploads if u.filename]
+
+
+@app.post("/api/builder/inspect")
+def inspect_uploads(sources: list[UploadFile] = File(default=[])):
+    """What we make of each file, with no AI and no key involved: the checklist the person sees before anything is sent anywhere."""
+    try:
+        files = _read_uploads(sources)
+        generate.check_files(files)
+    except generate.ResumeGenerationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"files": [generate.describe_file(name, content) for name, content in files]}
+
+
+# --- The material the builder keeps for each person: engagements (client and project work, one structured form) and notes. Private
+# to their owner, and used by every later draft, so updating a resume from new LinkedIn data does not mean typing them again.
+
+
+@app.get("/api/engagements", response_model=list[builder.EngagementOut])
+def list_engagements(db: Session = Depends(get_db)):
+    return [builder.to_out(row) for row in builder.list_engagements(db)]
+
+
+@app.post("/api/engagements", response_model=builder.EngagementOut)
+def create_engagement(body: builder.EngagementIn, db: Session = Depends(get_db)):
+    try:
+        return builder.to_out(builder.create_engagement(db, body))
+    except OverflowError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@app.put("/api/engagements/{engagement_id}", response_model=builder.EngagementOut)
+def update_engagement(engagement_id: int, body: builder.EngagementIn, db: Session = Depends(get_db)):
+    row = builder.update_engagement(db, engagement_id, body)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    return builder.to_out(row)
+
+
+@app.delete("/api/engagements/{engagement_id}")
+def delete_engagement(engagement_id: int, db: Session = Depends(get_db)):
+    if not builder.delete_engagement(db, engagement_id):
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    return {"ok": True}
+
+
+@app.get("/api/builder/notes")
+def get_notes(db: Session = Depends(get_db)):
+    return {"notes": builder.get_notes(db)}
+
+
+@app.put("/api/builder/notes")
+def put_notes(body: builder.NotesIn, db: Session = Depends(get_db)):
+    return {"notes": builder.save_notes(db, body.notes)}
+
+
+class PreviewIn(BaseModel):
+    resume_yaml: str
+    base_yaml: Optional[str] = None  # when updating: the resume as it is now, so what the draft changes can be shown
+
+
+def _changes(before: str, after: str, limit: int = 400) -> list:
+    """The lines an update adds and removes, with a line of context around each, as [{op, text}] (op is "+", "-" or " ")."""
+    lines = []
+    for line in difflib.unified_diff(before.strip().splitlines(), after.strip().splitlines(), lineterm="", n=1):
+        if line.startswith(("---", "+++")):
+            continue
+        lines.append({"op": line[:1] if line[:1] in "+-@" else " ", "text": line[1:] if line[:1] in "+- " else line})
+    return lines[:limit]
+
+
+@app.post("/api/builder/preview")
+def preview_resume(body: PreviewIn):
+    """A readable summary of a draft, for the review step, or exactly what is wrong with it (the person is editing YAML)."""
+    try:
+        data = yaml.safe_load(body.resume_yaml)
+    except yaml.YAMLError as e:
+        return {"ok": False, "error": f"That isn't valid YAML yet: {str(e).splitlines()[0] if str(e) else 'syntax error'}"}
+    if not isinstance(data, dict) or not isinstance(data.get("basics"), dict):
+        return {"ok": False, "error": "It needs a top-level 'basics' section."}
+    basics = data["basics"]
+    jobs = [j for j in (data.get("experience") or []) if isinstance(j, dict)]
+    return {
+        "ok": True,
+        "name": basics.get("name", ""),
+        "title": basics.get("title", ""),
+        "counts": {
+            "Jobs": len(jobs),
+            "Bullets": sum(len(j.get("bullets") or []) for j in jobs),
+            "Engagements": sum(len(j.get("engagements") or []) for j in jobs),
+            "Education": len(data.get("education") or []),
+            "Skills": sum(len((s or {}).get("items") or []) for s in (data.get("skills") or []) if isinstance(s, dict)),
+            "Certifications": len(data.get("certifications") or []),
+            "Projects": len(data.get("projects") or []),
+        },
+        "jobs": [
+            {"title": j.get("title", ""), "company": j.get("company", ""), "dates": f"{j.get('start', '')} - {j.get('end', '')}".strip(" -"),
+             "bullets": [str(b) for b in (j.get("bullets") or [])][:12]}
+            for j in jobs
+        ],
+        "changes": _changes(body.base_yaml, body.resume_yaml) if body.base_yaml else None,
+    }
+
+
 class GenerateResumeOut(BaseModel):
     resume_yaml: str
 
 
-@app.post("/api/generate-resume", response_model=GenerateResumeOut, dependencies=[Depends(accounts_gate.require_admin)])
-async def generate_resume_route(
-    linkedin_profile: Optional[UploadFile] = File(default=None),
-    documents: list[UploadFile] = File(default=[]),
-    notes: str = Form(default=""),
+@app.post("/api/generate-resume", response_model=GenerateResumeOut)
+def generate_resume_route(
+    sources: list[UploadFile] = File(default=[]),
+    update_person_id: Optional[int] = Form(default=None),
+    account: Account = Depends(accounts_gate.current_account),
+    db: Session = Depends(get_db),
 ):
-    if not config.ANTHROPIC_API_KEY:
-        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY is not configured - see README.md for setup")
-
+    """Draft a resume from the uploaded files plus the person's STORED engagements and notes (never taken from the request, so
+    what was saved is what is used). With `update_person_id`, the draft is a merge into that resume of theirs (one they own: anyone
+    else's is a 404), keeping their edits."""
+    api_key = apikeys.require(db, account.is_admin)  # their own key (an administrator may use the server's)
+    base_yaml = None
+    if update_person_id is not None:
+        base = crud.get_person(db, update_person_id)
+        if base is None:
+            raise HTTPException(status_code=404, detail="Person not found")
+        base_yaml = base.resume_yaml
+    engagement_list = builder.for_prompt(db)
+    notes = builder.get_notes(db)
     try:
-        linkedin_text = None
-        if linkedin_profile is not None and linkedin_profile.filename:
-            linkedin_text = generate.extract_text(linkedin_profile.filename, await linkedin_profile.read())
-
-        doc_texts = []
-        for upload in documents:
-            if not upload.filename:
-                continue
-            doc_texts.append((upload.filename, generate.extract_text(upload.filename, await upload.read())))
-
-        resume_yaml = generate.generate_resume_yaml(linkedin_text, doc_texts, notes)
+        linkedin_text, documents = generate.prepare_sources(_read_uploads(sources))
     except generate.ResumeGenerationError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    try:
+        limits.start(account.id)
+    except limits.TooBusy as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    try:
+        resume_yaml = generate.generate_resume_yaml(api_key, linkedin_text, documents, notes, engagement_list, base_yaml)
+    except generate.ResumeGenerationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        limits.finish(account.id)
     return GenerateResumeOut(resume_yaml=resume_yaml)
 
 

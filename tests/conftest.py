@@ -100,7 +100,7 @@ def no_network(monkeypatch):
     monkeypatch.setattr(requests, "request", refuse)
     monkeypatch.setattr(requests, "get", refuse)
     monkeypatch.setattr(requests, "post", refuse)
-    monkeypatch.setattr(generate, "generate_resume_yaml", refuse)
+    monkeypatch.setattr(generate.anthropic, "Anthropic", refuse)  # the real drafting code runs; only the AI call is a stand-in
     monkeypatch.setattr(config, "ANTHROPIC_API_KEY", None)
     # Whatever sign-in settings the developer's shell has, tests start local, with the dev user as the administrator.
     for name in (
@@ -110,6 +110,15 @@ def no_network(monkeypatch):
         monkeypatch.setattr(shared_settings, name, None)
     monkeypatch.setattr(shared_settings, "ENV", "local")
     monkeypatch.delenv("INTERNAL_API_TOKEN", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def fresh_draft_limits():
+    from app import limits
+
+    limits.reset()
+    yield
+    limits.reset()
 
 
 @pytest.fixture()

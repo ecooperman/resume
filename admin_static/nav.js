@@ -12,6 +12,7 @@ const header = Global.mountUserBadge && Global.mountUserBadge();
   }
   window.RESUME_ME = me;
   const items = [{ href: "/", icon: "person", label: me.is_admin ? "People" : "My resume", active: path === "/" }];
+  items.push({ href: "/build.html", icon: "zap", label: "Build my resume", active: path === "/build.html" });
   if (me.is_admin) {
     items.push({ href: "/codes.html", icon: "lock", label: "Access codes", active: path === "/codes.html" });
     items.push({ href: "/users.html", icon: "users", label: "Users", active: path === "/users.html" });

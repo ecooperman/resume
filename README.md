@@ -138,25 +138,20 @@ The admin UI's **"Generate a resume.yaml from documents"** section (on the
 People page) does the above for you, so someone using this app doesn't
 need a Claude account or to write a prompt themselves:
 
-1. On your own `linkedin.com/in/...` profile page, open the
-   job-application-chrome-extension's popup and click **"Export LinkedIn
-   profile"** (only shown on a profile page). Expand any "Show all"
-   links in Experience/Education/etc. first so nothing's collapsed off
-   the page - it downloads a `linkedin-profile-export-<date>.json`.
-2. In the admin UI, upload that JSON plus any other documents you have
-   (old resumes as PDF/DOCX, LinkedIn's own "Get a copy of your data"
-   export, plain-text notes) and optionally add a sentence or two of
-   extra context, then click **Generate**.
-3. The generated YAML lands in the "Add person" form's textarea below -
-   review and edit it (this is still just a first draft from messy
-   source material - check names, dates, and anything that looks off)
-   before filling in a name/slug and clicking **Add person**.
+Use the **Build my resume** page (`/build.html`, in the sidebar): numbered steps that take your own Anthropic key (step 1), LinkedIn's
+official "Get a copy of your data" ZIP (step 2, with the exact clicks written out; only the career parts of it are ever read), old resumes
+as PDF/Word/text (step 3; drag and drop, many at once), a form for the engagements behind your work (step 4: client or project, which job it belongs to, what the client does, industry, regulated or not and by whom, technologies, your role, dates, outcomes, and a don't-name-this-client box for NDAs). Engagements and your notes are **saved to your account** (tables `engagements`, `builder_notes`, private to you), so every later draft uses them; they ride in resume.yaml as an optional `engagements:` list under the matching job that is never printed, so a later step can tailor the resume to a job. When you already have a resume the page defaults to **Update**: drop a fresh LinkedIn ZIP and the draft is merged INTO your current resume (your hand edits are kept, only what is new or changed is added, your saved engagements are authoritative) and the review shows exactly which lines it changes. "What we found" shows how each file was understood before
+anything is sent. Press **Draft my resume**; the draft opens beside a readable summary (step 6) for you to fix, and only **Save** makes it
+your resume (an ordinary account replaces its one private resume, an administrator adds a person, never published automatically).
 
-Under the hood this is the exact same Claude call described above (see
-`app/generate.py`), just with the prompt and file-reading done server-side
-instead of by hand. It needs `ANTHROPIC_API_KEY` set (see "Local setup"
-below) - without it, the endpoint returns a clear error rather than a
-crash. The LinkedIn export itself never touches LinkedIn's servers or
+Under the hood this is the same Claude call described above (see
+`app/generate.py`), with the prompt and file-reading done server-side. It spends
+the PERSON'S OWN Anthropic key (saved encrypted, `app/apikeys.py`, needs
+`KEY_ENCRYPTION_SECRET` on the droplet); an administrator with no key of their own
+falls back to `ANTHROPIC_API_KEY`. Uploads are read in memory and never stored;
+limits (12 files, 8 MB each, 25 MB total, 40 PDF pages, ZIP entry and unpacked-size
+caps) guard the server, and each person can draft 6 times an hour, one at a time
+(`app/limits.py`). The LinkedIn export itself never touches LinkedIn's servers or
 scrapes anyone else's data - it's the extension reading your own already-
 authenticated profile page's DOM, the same legitimate pattern the
 extension's job-scoring features already use, not automated scraping.
@@ -261,16 +256,10 @@ shell before running `uvicorn app.admin:app`; on the droplet, set it in
 `/etc/systemd/system/resume-admin.service` (never commit the real value -
 see `deploy/resume-admin.service` for the placeholder line).
 
-`app/admin.py` also exposes `POST /api/generate-resume` - the browser-
-facing "Generate a resume.yaml from documents" feature (see "Self-service"
-above under "Constructing your resume.yaml"). Unlike the three above, this
-one is gated the same way as the rest of the admin UI (Cloudflare Access on
-this hostname, no internal token) since it's meant to be used from a
-browser, not called by another app. It needs `ANTHROPIC_API_KEY` set -
-export it in your shell locally; on the droplet it comes from the shared
-secrets file every app reads (`/etc/personal-apps/shared.env`, see
-`DEPLOYMENT.md`). Without it, the endpoint returns a clear 503 instead of a
-crash.
+`app/admin.py` also serves the builder's routes (`/api/api-key`, `/api/builder/inspect`, `/api/builder/preview`, `POST /api/generate-resume`).
+They are gated like the rest of the admin UI (the dashboard sign-in plus an account here, no internal token) since they are for a
+browser, not for another app. Drafting needs the signed-in person's own saved Anthropic key (an administrator may use the server's
+`ANTHROPIC_API_KEY` from `/etc/personal-apps/shared.env`).
 
 ## Local setup
 

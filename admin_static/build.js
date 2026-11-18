@@ -149,7 +149,8 @@ function dropzone(host, { accept, prompt, multiple }) {
     el("span", { text: "or click to choose" }),
     input,
   ]);
-  const take = (list) => addFiles([...list]);
+  const message = el("div", { class: "page-message hidden", role: "status" });
+  const take = (list) => addFiles([...list], message);
   zone.addEventListener("click", (e) => e.target !== input && input.click());
   zone.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), input.click()));
   input.addEventListener("change", () => {
@@ -167,19 +168,24 @@ function dropzone(host, { accept, prompt, multiple }) {
     e.preventDefault();
     take(e.dataTransfer.files);
   });
-  host.appendChild(zone);
+  host.append(message, zone);
 }
 
-function addFiles(list) {
+function addFiles(list, message) {
   const problems = [];
+  const added = [];
   for (const file of list) {
     if (!READABLE.includes(extension(file.name))) problems.push(`${file.name}: that kind of file can't be read (use PDF, Word, text, or LinkedIn's ZIP).`);
     else if (file.size > MAX_FILE_MB * 1024 * 1024) problems.push(`${file.name}: over ${MAX_FILE_MB} MB.`);
     else if (file.size === 0) problems.push(`${file.name}: it's empty.`);
     else if (files.length >= MAX_FILES) problems.push(`${file.name}: at most ${MAX_FILES} files at a time.`);
-    else files.push(file);
+    else {
+      files.push(file);
+      added.push(file.name);
+    }
   }
-  if (problems.length) Global.showMessage(problems.join(" "), "error");
+  if (problems.length) Global.showMessage(problems.join(" "), "error", message);
+  else if (added.length) Global.showMessage(added.length === 1 ? `Added ${added[0]}. Checking it below.` : `Added ${added.length} files. Checking them below.`, "success", message);
   checks = files.map(() => null);
   renderFound();
   inspect();
@@ -228,7 +234,7 @@ function renderFound() {
         detail.textContent = check.summary;
       } else if (check.found) {
         detail.append(...Object.entries(check.found).filter(([, n]) => n).map(([part, n]) => el("span", { class: "chip", text: `${part}: ${n}` })));
-        if (!check.found.Positions) detail.appendChild(el("div", { class: "is-problem", text: "No jobs (Positions) in it. Did LinkedIn include them?" }));
+        if (!check.found.Positions) detail.appendChild(el("div", { class: "is-problem", text: "No jobs (Positions) in it. LinkedIn's pick-individual-files option leaves jobs out. Request the larger data archive (the first option) and drop that ZIP here." }));
       } else {
         detail.textContent = check.summary;
       }

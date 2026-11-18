@@ -148,7 +148,7 @@ Under the hood this is the same Claude call described above (see
 `app/generate.py`), with the prompt and file-reading done server-side. It spends
 the PERSON'S OWN Anthropic key (saved encrypted, `app/apikeys.py`, needs
 `KEY_ENCRYPTION_SECRET` on the droplet); an administrator with no key of their own
-falls back to `ANTHROPIC_API_KEY`. Uploads are read in memory and never stored;
+falls back to `ANTHROPIC_API_KEY`. Uploads are read in memory and the original file is never kept; only its extracted text is (LinkedIn: just the career CSVs), per person in `source_files`, so an update starts from what they gave before, and the unsaved draft is kept in `builder_drafts` so a reload loses nothing (both deleted with the person's data; each person can switch keeping off, `builder_notes.keep_files`, in which case files ride with each draft request and nothing is stored);
 limits (12 files, 8 MB each, 25 MB total, 40 PDF pages, ZIP entry and unpacked-size
 caps) guard the server, and each person can draft 6 times an hour, one at a time
 (`app/limits.py`). The LinkedIn export itself never touches LinkedIn's servers or

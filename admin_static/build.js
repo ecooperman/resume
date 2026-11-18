@@ -12,14 +12,16 @@ const READABLE = [".pdf", ".docx", ".txt", ".md", ".csv", ".json", ".yaml", ".ym
 let me = { is_admin: false };
 let existing = null; // the signed-in person's one resume, if they have one (ordinary accounts)
 let keyStatus = { usable: false };
-let files = []; // File objects, in the order added
-let checks = []; // what the server made of each, same order
+let keep = true; // their choice (saved on the server): keep the text of their files and their draft, or hold nothing
+let localFiles = []; // when not keeping: the File objects, held in this page only (a refresh loses them)
+let localChecks = []; // what the server made of each, same order
+let sources = []; // what the server keeps of the person's files (GET /api/builder/sources): their text, never the originals
 let engagements = []; // saved on the server (GET /api/engagements); the form below adds, edits and removes them there
 let myPeople = []; // this account's resumes (an ordinary account has at most one)
 let target = null; // the resume an update merges into: {id, name}; null means a brand new one
 let baseYaml = null; // that resume's text, so the review can show what an update changes
 let targetEmployers = []; // the companies on it, offered when describing an engagement
-let inspectRound = 0;
+let draftTimer = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -28,7 +30,10 @@ const $ = (id) => document.getElementById(id);
 let notesTimer = null;
 async function loadNotes() {
   try {
-    $("notes").value = (await Global.fetchJSON("/api/builder/notes")).notes;
+    const saved = await Global.fetchJSON("/api/builder/notes");
+    $("notes").value = saved.notes;
+    keep = saved.keep_files;
+    renderKeep();
   } catch (err) {
     Global.showMessage(err.message, "error");
   }
@@ -171,79 +176,171 @@ function dropzone(host, { accept, prompt, multiple }) {
   host.append(message, zone);
 }
 
-function addFiles(list, message) {
+async function addFiles(list, message) {
   const problems = [];
-  const added = [];
+  const accepted = [];
   for (const file of list) {
     if (!READABLE.includes(extension(file.name))) problems.push(`${file.name}: that kind of file can't be read (use PDF, Word, text, or LinkedIn's ZIP).`);
     else if (file.size > MAX_FILE_MB * 1024 * 1024) problems.push(`${file.name}: over ${MAX_FILE_MB} MB.`);
     else if (file.size === 0) problems.push(`${file.name}: it's empty.`);
-    else if (files.length >= MAX_FILES) problems.push(`${file.name}: at most ${MAX_FILES} files at a time.`);
-    else {
-      files.push(file);
-      added.push(file.name);
+    else accepted.push(file);
+  }
+  if (accepted.length && !keep) {
+    localFiles.push(...accepted);
+    localChecks = localFiles.map(() => null);
+    Global.showMessage(`Added ${accepted.map((f) => f.name).join(", ")}. It is held in this page only; a refresh will remove it.`, "success", message);
+    renderFound();
+    updateDraftButton();
+    checkLocal();
+  } else if (accepted.length) {
+    const data = new FormData();
+    accepted.forEach((f) => data.append("sources", f));
+    Global.showMessage(accepted.length === 1 ? `Reading ${accepted[0].name}...` : `Reading ${accepted.length} files...`, "success", message);
+    try {
+      const result = await Global.fetchJSON("/api/builder/sources", { method: "POST", body: data });
+      sources = result.sources;
+      for (const r of result.rejected) problems.push(`${r.name}: ${r.problem}`);
+      if (result.added.length && !problems.length) {
+        Global.showMessage(result.added.length === 1 ? `Added ${result.added[0].name} and saved it to your account.` : `Added ${result.added.length} files and saved them to your account.`, "success", message);
+      }
+    } catch (err) {
+      problems.push(err.message);
     }
   }
   if (problems.length) Global.showMessage(problems.join(" "), "error", message);
-  else if (added.length) Global.showMessage(added.length === 1 ? `Added ${added[0]}. Checking it below.` : `Added ${added.length} files. Checking them below.`, "success", message);
-  checks = files.map(() => null);
   renderFound();
-  inspect();
   updateDraftButton();
 }
 
-function removeFile(index) {
-  files.splice(index, 1);
-  checks = files.map(() => null);
-  renderFound();
-  inspect();
-  updateDraftButton();
-}
-
-// Ask the server what it makes of each file (no AI, no key): the checklist shows the file was understood before anything is sent.
-async function inspect() {
-  const round = ++inspectRound;
-  if (!files.length) return;
-  const data = new FormData();
-  for (const f of files) data.append("sources", f);
+async function removeFile(source) {
   try {
-    const result = await Global.fetchJSON("/api/builder/inspect", { method: "POST", body: data });
-    if (round !== inspectRound) return; // a newer list is already being checked
-    checks = result.files;
+    await Global.fetchJSON(`/api/builder/sources/${source.id}`, { method: "DELETE" });
+    sources = sources.filter((s) => s.id !== source.id);
   } catch (err) {
-    if (round !== inspectRound) return;
-    checks = files.map(() => ({ ok: false, summary: err.message }));
+    Global.showMessage(err.message, "error");
   }
   renderFound();
   updateDraftButton();
+}
+
+// Not keeping: ask the server what it makes of the files held in this page (nothing is stored), so they are checked before a draft.
+let checkRound = 0;
+async function checkLocal() {
+  const round = ++checkRound;
+  if (!localFiles.length) return;
+  const data = new FormData();
+  localFiles.forEach((f) => data.append("sources", f));
+  try {
+    const result = await Global.fetchJSON("/api/builder/inspect", { method: "POST", body: data });
+    if (round !== checkRound) return;
+    localChecks = result.files;
+  } catch (err) {
+    if (round !== checkRound) return;
+    localChecks = localFiles.map(() => ({ ok: false, found: {}, summary: err.message }));
+  }
+  renderFound();
+  updateDraftButton();
+}
+
+function removeLocal(index) {
+  localFiles.splice(index, 1);
+  localChecks = localFiles.map(() => null);
+  renderFound();
+  updateDraftButton();
+  checkLocal();
+}
+
+async function loadSources() {
+  try {
+    sources = await Global.fetchJSON("/api/builder/sources");
+  } catch (err) {
+    Global.showMessage(err.message, "error");
+  }
+  renderFound();
+  updateDraftButton();
+}
+
+function when(iso) {
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function renderFound() {
   const host = $("found");
-  if (!files.length) {
-    host.replaceChildren(el("p", { class: "hint", text: "Nothing added yet. Files you add above are checked here, before anything is sent anywhere." }));
+  // One row per file, whether it is kept on the account (sources) or held in this page only (localFiles).
+  const rows = keep
+    ? sources.map((source) => ({ name: source.name, label: `${source.name} (${mb(source.size_bytes)}, added ${when(source.added_at)})`, check: { ok: true, found: source.found, summary: source.summary }, remove: () => removeFile(source) }))
+    : localFiles.map((file, i) => ({ name: file.name, label: `${file.name} (${mb(file.size)}, this page only)`, check: localChecks[i], remove: () => removeLocal(i) }));
+  if (!rows.length) {
+    host.replaceChildren(el("p", { class: "hint", text: keep ? "Nothing added yet. Files you add above are read and kept here." : "Nothing added yet. Files you add above are held in this page only." }));
     return;
   }
   host.replaceChildren(
-    ...files.map((file, i) => {
-      const check = checks[i];
+    ...rows.map((row) => {
       const detail = el("div", { class: "found-detail" });
+      const check = row.check;
+      const parts = check ? Object.entries(check.found || {}).filter(([, n]) => n) : [];
       if (!check) detail.textContent = "Checking...";
       else if (!check.ok) {
         detail.classList.add("is-problem");
         detail.textContent = check.summary;
-      } else if (check.found) {
-        detail.append(...Object.entries(check.found).filter(([, n]) => n).map(([part, n]) => el("span", { class: "chip", text: `${part}: ${n}` })));
+      } else if (parts.length) {
+        detail.append(...parts.map(([part, n]) => el("span", { class: "chip", text: `${part}: ${n}` })));
         if (!check.found.Positions) detail.appendChild(el("div", { class: "is-problem", text: "No jobs (Positions) in it. LinkedIn's pick-individual-files option leaves jobs out. Request the larger data archive (the first option) and drop that ZIP here." }));
       } else {
         detail.textContent = check.summary;
       }
-      const remove = el("button", { type: "button", class: "cancel-btn", text: "Remove", "aria-label": `Remove ${file.name}` });
-      remove.addEventListener("click", () => removeFile(i));
-      return el("div", { class: "found-row" }, [el("div", { class: "found-name", text: `${file.name} (${mb(file.size)})` }), detail, remove]);
+      const remove = el("button", { type: "button", class: "cancel-btn", text: "Remove", "aria-label": `Remove ${row.name}` });
+      remove.addEventListener("click", row.remove);
+      return el("div", { class: "found-row" }, [el("div", { class: "found-name", text: row.label }), detail, remove]);
     })
   );
   Global.iconifyButtons && Global.iconifyButtons(host);
+}
+
+// --- keeping or not keeping the files ---------------------------------------------------------------------------------------------
+
+function renderKeep() {
+  $("keep-files").checked = keep;
+  $("keep-hint").textContent = keep
+    ? "On: your files' text and your draft are saved, so you can come back and update your resume without adding anything again."
+    : "Off: nothing from your files is saved. They are held in this page only, so refreshing it means adding them again and starting the draft over. Your engagements and notes are still saved.";
+  renderFound();
+}
+
+async function changeKeep() {
+  const wanted = $("keep-files").checked;
+  if (!wanted && (sources.length || !$("step-review").classList.contains("hidden"))) {
+    const kept = sources.length ? `the ${sources.length} file${sources.length === 1 ? "" : "s"} saved on your account and ` : "";
+    if (!confirm(`Turning this off deletes ${kept}your saved draft. A refresh will then start you over. Continue?`)) {
+      $("keep-files").checked = true;
+      return;
+    }
+  }
+  try {
+    await Global.fetchJSON("/api/builder/keep", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ keep: wanted }) });
+  } catch (err) {
+    Global.showMessage(err.message, "error");
+    $("keep-files").checked = keep;
+    return;
+  }
+  keep = wanted;
+  clearTimeout(draftTimer);
+  if (!keep) sources = [];
+  if (keep && localFiles.length) {
+    // They turned keeping back on: what this page was holding is saved now.
+    const data = new FormData();
+    localFiles.forEach((f) => data.append("sources", f));
+    localFiles = [];
+    localChecks = [];
+    try {
+      sources = (await Global.fetchJSON("/api/builder/sources", { method: "POST", body: data })).sources;
+    } catch (err) {
+      Global.showMessage(err.message, "error");
+    }
+  }
+  if (keep && $("draft-yaml").value.trim()) saveDraftSoon();
+  renderKeep();
+  updateDraftButton();
 }
 
 // --- step 4: engagements (saved to the account) --------------------------------------------------------------------------------
@@ -466,9 +563,9 @@ function renderMode() {
     return el("div", { class: "radio-line" }, [input, el("label", { for: `mode-${value}`, text: label })]);
   };
   for (const person of myPeople) {
-    options.push(radio(String(person.id), `Update "${person.name}" with these files. Your edits are kept; only what's new or changed is merged in.`, target && target.id === person.id));
+    options.push(radio(String(person.id), `Update "${person.name}" with everything saved here. Your edits are kept; only what's new or changed is merged in.`, target && target.id === person.id));
   }
-  options.push(radio("new", me.is_admin ? "Write a brand new person instead" : "Start fresh from these files (replaces your resume only when you Save)", !target));
+  options.push(radio("new", me.is_admin ? "Write a brand new person instead" : "Start fresh from everything saved here (replaces your resume only when you Save)", !target));
   host.replaceChildren(el("label", { text: "What should this do?" }), ...options);
 }
 
@@ -477,24 +574,21 @@ function engagementsCount() {
 }
 
 function hasMaterial() {
-  return files.some((_f, i) => !checks[i] || checks[i].ok) || engagementsCount() > 0 || $("notes").value.trim().length > 0;
+  return sources.length > 0 || localChecks.some((c) => c && c.ok) || engagementsCount() > 0 || $("notes").value.trim().length > 0;
 }
 
 function updateDraftButton() {
   let why = "";
   if (!keyStatus.usable) why = "Add your Anthropic key in step 1 first.";
-  else if (files.length && files.every((_f, i) => checks[i] && !checks[i].ok) && !engagementsCount() && !$("notes").value.trim()) why = "None of your files could be read. Remove them or fix what's flagged above.";
-  else if (target && !files.some((_f, i) => !checks[i] || checks[i].ok)) why = "To update your resume, add the new material first: a fresh LinkedIn ZIP or another document.";
   else if (!hasMaterial()) why = "Add a LinkedIn ZIP, an old resume, an engagement or a note first.";
   $("draft-btn").disabled = Boolean(why);
   $("draft-why").textContent = why;
 }
 
 async function draft() {
-  const data = new FormData();
-  files.forEach((f, i) => {
-    if (!checks[i] || checks[i].ok) data.append("sources", f); // a file we already know can't be read is left out
-  });
+  if ($("draft-yaml").value.trim() && !$("step-review").classList.contains("hidden") && !confirm("This replaces the draft you are working on below. Continue?")) return;
+  const data = new FormData(); // the files, engagements and notes are already saved; the server drafts from those
+  if (!keep) localFiles.forEach((f, i) => (!localChecks[i] || localChecks[i].ok) && data.append("sources", f)); // not kept: they ride with the draft
   if (target) data.append("update_person_id", String(target.id));
   $("draft-btn").disabled = true;
   $("draft-status").textContent = "Drafting. This usually takes 30 to 90 seconds. Keep this page open.";
@@ -504,6 +598,7 @@ async function draft() {
     await Global.fetchJSON("/api/builder/notes", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ notes: $("notes").value }) });
     const result = await Global.fetchJSON("/api/generate-resume", { method: "POST", body: data });
     showReview(result.resume_yaml);
+    $("draft-note").classList.add("hidden");
     Global.showMessage(target ? "Update ready. Look at what changed, fix anything, then Save." : "Draft ready. Read it through below, fix anything, then Save.", "success");
   } catch (err) {
     Global.showMessage(err.message, "error");
@@ -519,12 +614,61 @@ let previewRound = 0;
 let previewTimer = null;
 let lastPreview = { ok: false };
 
-function showReview(yamlText) {
+function showReview(yamlText, { scroll = true } = {}) {
   $("step-review").classList.remove("hidden");
   $("draft-yaml").value = yamlText;
   renderSaveFields();
   refreshPreview();
-  $("step-review").scrollIntoView({ behavior: "smooth", block: "start" });
+  if (scroll) $("step-review").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// The draft being reviewed is kept on the server as it is edited, so a reload or coming back tomorrow does not lose it.
+function saveDraftSoon() {
+  clearTimeout(draftTimer);
+  if (!keep) return;
+  draftTimer = setTimeout(async () => {
+    try {
+      await Global.fetchJSON("/api/builder/draft", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ resume_yaml: $("draft-yaml").value, person_id: target ? target.id : null }) });
+      $("save-status").textContent = "Draft kept";
+    } catch (err) {
+      $("save-status").textContent = `Couldn't keep this draft: ${err.message}`;
+    }
+  }, 1000);
+}
+
+async function clearDraft() {
+  clearTimeout(draftTimer);
+  try {
+    await Global.fetchJSON("/api/builder/draft", { method: "DELETE" });
+  } catch (err) {
+    Global.showMessage(err.message, "error");
+  }
+}
+
+async function discardDraft() {
+  if (!confirm("Throw away this draft? Your files, engagements and notes stay; you can draft again any time.")) return;
+  await clearDraft();
+  $("draft-yaml").value = "";
+  $("draft-note").classList.add("hidden");
+  $("step-review").classList.add("hidden");
+  $("save-status").textContent = "";
+}
+
+async function restoreDraft() {
+  let saved = null;
+  try {
+    saved = (await Global.fetchJSON("/api/builder/draft")).draft;
+  } catch (err) {
+    Global.showMessage(err.message, "error");
+  }
+  if (!saved) return;
+  target = saved.person_id ? myPeople.find((p) => p.id === saved.person_id) || null : null;
+  await loadTarget();
+  renderMode();
+  showReview(saved.resume_yaml, { scroll: false });
+  const note = $("draft-note");
+  note.textContent = `This is the draft you were working on (last changed ${new Date(saved.updated_at).toLocaleString()}). It is not saved as your resume yet.`;
+  note.classList.remove("hidden");
 }
 
 async function refreshPreview() {
@@ -615,6 +759,8 @@ async function save() {
     target = myPeople.find((p) => p.id === saved.id) || null; // the next update merges into what was just saved
     await loadTarget();
     renderMode();
+    await clearDraft(); // it is a resume now, no longer a draft
+    $("draft-note").classList.add("hidden");
     $("save-status").replaceChildren(document.createTextNode("Saved. "), el("a", { href: "/", text: "Open my resume" }));
     Global.showMessage("Saved.", "success");
   } catch (err) {
@@ -638,7 +784,6 @@ async function start() {
   }
   dropzone($("drop-linkedin"), { accept: ".zip,.json", prompt: "Drop LinkedIn's ZIP here", multiple: false });
   dropzone($("drop-resumes"), { accept: ".pdf,.docx,.txt,.md", prompt: "Drop your old resumes here", multiple: true });
-  renderFound();
   renderMode();
   $("add-engagement").addEventListener("click", () => openEngagementForm(null));
   $("notes").addEventListener("input", () => {
@@ -647,12 +792,17 @@ async function start() {
   });
   $("draft-btn").addEventListener("click", draft);
   $("save-btn").addEventListener("click", save);
+  $("discard-btn").addEventListener("click", discardDraft);
+  $("keep-files").addEventListener("change", changeKeep);
   $("draft-yaml").addEventListener("input", () => {
     clearTimeout(previewTimer);
     previewTimer = setTimeout(refreshPreview, 400);
+    $("save-status").textContent = "";
+    saveDraftSoon();
   });
   Global.iconifyButtons && Global.iconifyButtons(document.body);
-  await Promise.all([loadKey(), loadNotes(), loadTarget()]);
+  await Promise.all([loadKey(), loadNotes(), loadTarget(), loadSources()]);
   await loadEngagements();
+  await restoreDraft();
 }
 start();

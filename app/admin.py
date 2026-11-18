@@ -26,7 +26,7 @@ from shared_python import accounts_gate, oidc_login
 from shared_python.accounts_gate import Account
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from . import access, apikeys, builder, config, crud, generate, limits, render, users
@@ -162,7 +162,7 @@ def render_cover_letter_document(body: CoverLetterRenderRequest):
 
 # --- The builder: browser-facing. Takes what a person uploads, drafts a resume.yaml for the page to show for review, and
 # never writes a Person itself (see app/generate.py for why that review step matters). It spends the PERSON'S OWN Anthropic key
-# (an administrator may fall back to the server's), uploads are read in memory and never stored, and each person is limited to a
+# (an administrator may fall back to the server's), what they upload is read in memory and only its text is kept (never the original file), and each person is limited to a
 # few drafts an hour (app/limits.py).
 
 
@@ -210,15 +210,87 @@ def _read_uploads(uploads: list[UploadFile]) -> list[tuple[str, bytes]]:
     return [(Path(u.filename).name, u.file.read(generate.MAX_FILE_BYTES + 1)) for u in uploads if u.filename]
 
 
+@app.get("/api/builder/sources", response_model=list[builder.SourceOut])
+def list_sources(db: Session = Depends(get_db)):
+    return [builder.source_out(row) for row in builder.list_sources(db)]
+
+
 @app.post("/api/builder/inspect")
 def inspect_uploads(sources: list[UploadFile] = File(default=[])):
-    """What we make of each file, with no AI and no key involved: the checklist the person sees before anything is sent anywhere."""
+    """What we make of each file, with nothing kept (for someone who chose not to keep files): the same reading as adding them."""
     try:
         files = _read_uploads(sources)
         generate.check_files(files)
     except generate.ResumeGenerationError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"files": [generate.describe_file(name, content) for name, content in files]}
+    out = []
+    for name, content in files:
+        try:
+            read = generate.read_source(name, content)
+            out.append({"name": name, "ok": True, "kind": read["kind"], "found": read["found"], "summary": read["summary"]})
+        except generate.ResumeGenerationError as e:
+            out.append({"name": name, "ok": False, "found": {}, "summary": str(e)})
+    return {"files": out}
+
+
+@app.post("/api/builder/sources")
+def add_sources(sources: list[UploadFile] = File(default=[]), db: Session = Depends(get_db)):
+    """Read each uploaded file (no AI and no key involved) and keep its text for this person, so a later draft or update starts from
+    it. The original file is not kept. A file that cannot be read is reported and not kept; the others still are."""
+    _must_keep(db)
+    try:
+        files = _read_uploads(sources)
+        generate.check_files(files)
+    except generate.ResumeGenerationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    kept, rejected = [], []
+    for name, content in files:
+        try:
+            read = generate.read_source(name, content)
+        except generate.ResumeGenerationError as e:
+            rejected.append({"name": name, "problem": str(e)})
+            continue
+        try:
+            kept.append(builder.source_out(builder.add_source(db, name, len(content), read)))
+        except OverflowError as e:
+            rejected.append({"name": name, "problem": str(e)})
+    return {"added": kept, "rejected": rejected, "sources": [builder.source_out(row) for row in builder.list_sources(db)]}
+
+
+@app.delete("/api/builder/sources/{source_id}")
+def delete_source(source_id: int, db: Session = Depends(get_db)):
+    if not builder.delete_source(db, source_id):
+        raise HTTPException(status_code=404, detail="File not found")
+    return {"ok": True}
+
+
+class DraftIn(BaseModel):
+    resume_yaml: str = Field(max_length=builder.MAX_DRAFT_CHARS)
+    person_id: Optional[int] = None
+
+
+def _draft_out(row) -> Optional[dict]:
+    return None if row is None else {"resume_yaml": row.resume_yaml, "person_id": row.person_id, "updated_at": row.updated_at.isoformat() + "Z"}
+
+
+@app.get("/api/builder/draft")
+def get_draft(db: Session = Depends(get_db)):
+    """The draft this person was reviewing and had not saved (or null), so a reload does not lose it."""
+    return {"draft": _draft_out(builder.get_draft(db))}
+
+
+@app.put("/api/builder/draft")
+def put_draft(body: DraftIn, db: Session = Depends(get_db)):
+    _must_keep(db)
+    if body.person_id is not None and crud.get_person(db, body.person_id) is None:
+        raise HTTPException(status_code=404, detail="Person not found")
+    return {"draft": _draft_out(builder.save_draft(db, body.resume_yaml, body.person_id))}
+
+
+@app.delete("/api/builder/draft")
+def delete_draft(db: Session = Depends(get_db)):
+    builder.delete_draft(db)
+    return {"draft": None}
 
 
 # --- The material the builder keeps for each person: engagements (client and project work, one structured form) and notes. Private
@@ -255,7 +327,22 @@ def delete_engagement(engagement_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/builder/notes")
 def get_notes(db: Session = Depends(get_db)):
-    return {"notes": builder.get_notes(db)}
+    return {"notes": builder.get_notes(db), "keep_files": builder.keeps_files(db)}
+
+
+class KeepIn(BaseModel):
+    keep: bool
+
+
+@app.put("/api/builder/keep")
+def put_keep(body: KeepIn, db: Session = Depends(get_db)):
+    """Whether the builder keeps this person's files and draft. Turning it off deletes what is already kept."""
+    return {"keep_files": builder.set_keep_files(db, body.keep)}
+
+
+def _must_keep(db: Session) -> None:
+    if not builder.keeps_files(db):
+        raise HTTPException(status_code=409, detail="You chose not to keep files on your account. Turn that on to keep them.")
 
 
 @app.put("/api/builder/notes")
@@ -322,9 +409,10 @@ def generate_resume_route(
     account: Account = Depends(accounts_gate.current_account),
     db: Session = Depends(get_db),
 ):
-    """Draft a resume from the uploaded files plus the person's STORED engagements and notes (never taken from the request, so
-    what was saved is what is used). With `update_person_id`, the draft is a merge into that resume of theirs (one they own: anyone
-    else's is a 404), keeping their edits."""
+    """Draft a resume from everything the person has STORED: the text of their files, their engagements and their notes (none of it
+    taken from the request, so what was saved is what is used; adding one engagement and drafting again is all an update needs).
+    With `update_person_id`, the draft is a merge into that resume of theirs (one they own: anyone else's is a 404), keeping their
+    edits. The result is kept as their unsaved draft (unless they chose not to keep files), so a reload does not lose it."""
     api_key = apikeys.require(db, account.is_admin)  # their own key (an administrator may use the server's)
     base_yaml = None
     if update_person_id is not None:
@@ -334,10 +422,14 @@ def generate_resume_route(
         base_yaml = base.resume_yaml
     engagement_list = builder.for_prompt(db)
     notes = builder.get_notes(db)
-    try:
-        linkedin_text, documents = generate.prepare_sources(_read_uploads(sources))
-    except generate.ResumeGenerationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    linkedin_text, documents = builder.sources_for_prompt(db)
+    if sources:  # someone who chose not to keep files sends them with each draft; they are read in memory and never stored
+        try:
+            sent_linkedin, sent_documents = generate.prepare_sources(_read_uploads(sources))
+        except generate.ResumeGenerationError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        linkedin_text = "\n\n".join(t for t in (linkedin_text, sent_linkedin) if t) or None
+        documents = documents + sent_documents
     try:
         limits.start(account.id)
     except limits.TooBusy as e:
@@ -348,6 +440,8 @@ def generate_resume_route(
         raise HTTPException(status_code=400, detail=str(e))
     finally:
         limits.finish(account.id)
+    if builder.keeps_files(db):
+        builder.save_draft(db, resume_yaml, update_person_id)
     return GenerateResumeOut(resume_yaml=resume_yaml)
 
 

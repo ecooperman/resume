@@ -79,19 +79,24 @@ def test_deleting_a_removed_persons_data_deletes_exactly_theirs_and_their_built_
     with as_user(bob_id) as db:  # planted: files and a code of Bob's
         person = db.query(models.Person).first()
         crud.generate_code(db, label="x", person_id=person.id)
+    client_as("bob@example.com").post("/api/builder/sources", files=[("sources", ("cv.txt", b"BOBS words here"))])
+    client_as("bob@example.com").put("/api/builder/draft", json={"resume_yaml": "basics: {}"})
+    client_as("carol@example.com").post("/api/builder/sources", files=[("sources", ("cv.txt", b"CAROLS words here"))])
     for tree in ("public", "private"):
         (site_dir / tree / bob_slug).mkdir(parents=True)
         (site_dir / tree / bob_slug / "index.html").write_text("bob")
     assert admin_client.delete(f"{URL}/{bob_id}/data").status_code == 409  # not removed yet
     admin_client.patch(f"{URL}/{bob_id}", json={"status": "removed"})
     deleted = admin_client.delete(f"{URL}/{bob_id}/data").json()["deleted"]
-    assert deleted == {"people": 1, "codes": 1, "keys": 0, "engagements": 0}
+    assert deleted == {"people": 1, "codes": 1, "keys": 0, "engagements": 0, "sources": 1}
     assert not (site_dir / "public" / bob_slug).exists() and not (site_dir / "private" / bob_slug).exists()
     assert (site_dir / "public" / "owner").exists()  # the administrator's files stay
     assert [p["name"] for p in client_as("carol@example.com").get("/api/people").json()] == ["Carol"]
     assert [p["name"] for p in admin_client.get("/api/people").json()] == ["Owner"]
     with as_user(bob_id) as db:
         assert db.query(models.Person).count() == 0 and db.query(models.AccessCode).count() == 0
+        assert db.query(models.SourceFile).count() == 0 and db.query(models.BuilderDraft).count() == 0
+    assert len(client_as("carol@example.com").get("/api/builder/sources").json()) == 1  # deleting Bob's data leaves Carol's files alone
 
 
 def fake_apps(tmp_path, monkeypatch, **emails_by_folder):

@@ -6,12 +6,13 @@ Every text field is cut to a sensible length and cleaned of control characters; 
 routes are in app/admin.py; this module is the validation and the way the rows become the plain dicts the drafting code reads."""
 import json
 import re
+from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from . import models
+from . import generate, models
 
 MAX_ENGAGEMENTS = 60
 MAX_TEXT = 300
@@ -177,6 +178,109 @@ def save_notes(db: Session, notes: str) -> str:
         row.notes = notes
     db.commit()
     return notes
+
+
+# --- stored sources (the text of what they uploaded) and the unsaved draft -------------------------------------------------------
+
+class SourceOut(BaseModel):
+    id: int
+    name: str
+    kind: str
+    summary: str
+    found: dict
+    size_bytes: int
+    added_at: str
+
+
+def source_out(row: models.SourceFile) -> SourceOut:
+    return SourceOut(id=row.id, name=row.name, kind=row.kind, summary=row.summary, found=json.loads(row.found or "{}"),
+                     size_bytes=row.size_bytes, added_at=row.added_at.isoformat() + "Z")
+
+
+def list_sources(db: Session) -> List[models.SourceFile]:
+    return db.query(models.SourceFile).order_by(models.SourceFile.added_at, models.SourceFile.id).all()  # only the signed-in person's own
+
+
+def add_source(db: Session, name: str, size: int, read: dict) -> models.SourceFile:
+    """Keep what was read from one file. A newer LinkedIn export replaces the older one, and a file with the same name as one already
+    kept replaces it, so adding the new version of something never leaves the old one behind."""
+    for row in list_sources(db):
+        if (read["kind"] == "linkedin" and row.kind == "linkedin") or row.name == name:
+            db.delete(row)
+    db.flush()
+    if len(list_sources(db)) >= generate.MAX_STORED_SOURCES:
+        db.rollback()
+        raise OverflowError(f"You can keep up to {generate.MAX_STORED_SOURCES} files. Remove one to add another.")
+    row = models.SourceFile(name=name, kind=read["kind"], text=read["text"], found=json.dumps(read["found"]), summary=read["summary"], size_bytes=size)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def delete_source(db: Session, source_id: int) -> bool:
+    row = db.query(models.SourceFile).filter(models.SourceFile.id == source_id).first()
+    if row is None:
+        return False
+    db.delete(row)
+    db.commit()
+    return True
+
+
+def sources_for_prompt(db: Session):
+    """(LinkedIn text or None, [(filename, text)]) from what this person has kept, for the drafting code."""
+    return generate.assemble_sources([(row.kind, row.name, row.text) for row in list_sources(db)])
+
+
+MAX_DRAFT_CHARS = 300_000
+
+
+def get_draft(db: Session) -> Optional[models.BuilderDraft]:
+    return db.query(models.BuilderDraft).first()
+
+
+def save_draft(db: Session, resume_yaml: str, person_id: Optional[int]) -> models.BuilderDraft:
+    row = get_draft(db)
+    if row is None:
+        row = models.BuilderDraft()
+        db.add(row)
+    row.resume_yaml = resume_yaml
+    row.person_id = person_id
+    row.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def delete_draft(db: Session) -> bool:
+    row = get_draft(db)
+    if row is None:
+        return False
+    db.delete(row)
+    db.commit()
+    return True
+
+
+def keeps_files(db: Session) -> bool:
+    row = db.query(models.BuilderNotes).first()
+    return True if row is None else bool(row.keep_files)
+
+
+def set_keep_files(db: Session, keep: bool) -> bool:
+    """Their choice. Turning it off deletes what is already kept (the files' text and the unsaved draft)."""
+    row = db.query(models.BuilderNotes).first()
+    if row is None:
+        row = models.BuilderNotes(notes="")
+        db.add(row)
+    row.keep_files = keep
+    if not keep:
+        for source in list_sources(db):
+            db.delete(source)
+        draft = get_draft(db)
+        if draft is not None:
+            db.delete(draft)
+    db.commit()
+    return keep
 
 
 def for_prompt(db: Session) -> List[dict]:

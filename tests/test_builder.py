@@ -70,8 +70,25 @@ LINKEDIN = {
 }
 
 
+class Refused:
+    """What a file that could not be read looks like to a test: the same 400 and message drafting used to give."""
+
+    def __init__(self, problem):
+        self.status_code, self.text = 400, problem
+
+    def json(self):
+        return {"detail": self.text}
+
+
 def upload(client, files, **fields):
-    return client.post("/api/generate-resume", files=[("sources", f) for f in files], data=fields)
+    """Keep the files (POST /api/builder/sources), then draft from everything kept (POST /api/generate-resume)."""
+    if files:
+        kept = client.post("/api/builder/sources", files=[("sources", f) for f in files])
+        if kept.status_code != 200:
+            return kept
+        if kept.json()["rejected"]:
+            return Refused(" ".join(r["problem"] for r in kept.json()["rejected"]))
+    return client.post("/api/generate-resume", data=fields)
 
 
 # --- the key ---------------------------------------------------------------------------------------------------------------------
@@ -458,20 +475,132 @@ def test_a_word_file_is_read(person, people, monkeypatch):
 # --- the "what we found" checklist and the review summary -------------------------------------------------------------------
 
 
-def test_inspect_shows_what_was_found_without_any_key_or_ai(person, people, monkeypatch):
-    bob = person("bob@example.com")  # no key saved: inspecting costs nothing
-    resp = bob.post("/api/builder/inspect", files=[("sources", ("export.zip", make_zip(LINKEDIN))), ("sources", ("old.txt", b"one two three"))])
+def test_adding_files_shows_what_was_found_without_any_key_or_ai_and_keeps_only_the_career_text(person, people, monkeypatch):
+    bob = person("bob@example.com")  # no key saved: reading a file costs nothing
+    resp = bob.post("/api/builder/sources", files=[("sources", ("export.zip", make_zip(LINKEDIN))), ("sources", ("old.txt", b"one two three"))])
     assert resp.status_code == 200
-    first, second = resp.json()["files"]
-    assert first["found"] == {"Profile": 1, "Positions": 3, "Education": 1, "Skills": 2}
+    first, second = resp.json()["added"]
+    assert first["found"] == {"Profile": 1, "Positions": 3, "Education": 1, "Skills": 2} and first["kind"] == "linkedin"
     assert first["summary"] == "LinkedIn data export: 1 profile, 3 positions, 1 education, 2 skills"
     assert second["summary"] == "3 words read"
     assert "SECRET-FRIEND" not in resp.text and "Connections" not in resp.text
+    with __import__("app.database", fromlist=["SessionLocal"]).SessionLocal() as db:
+        from shared_python import owned
+
+        with owned.unscoped():
+            kept = " ".join(row.text for row in db.query(models.SourceFile).all())
+    assert "Globex" in kept and "SECRET-FRIEND" not in kept and "PRIVATE-MESSAGE-TEXT" not in kept  # the career files only, as text
 
 
-def test_inspect_refuses_what_drafting_would(person, people):
+def test_files_that_cannot_be_read_are_refused_and_not_kept(person, people):
     bob = person("bob@example.com")
-    assert bob.post("/api/builder/inspect", files=[("sources", ("x.exe", b"MZ"))]).status_code == 400
+    assert bob.post("/api/builder/sources", files=[("sources", ("x.exe", b"MZ"))]).status_code == 400
+    mixed = bob.post("/api/builder/sources", files=[("sources", ("bad.zip", b"not a zip")), ("sources", ("ok.txt", b"hello there"))]).json()
+    assert [a["name"] for a in mixed["added"]] == ["ok.txt"] and mixed["rejected"][0]["name"] == "bad.zip"
+    assert [s["name"] for s in bob.get("/api/builder/sources").json()] == ["ok.txt"]
+
+
+def test_a_newer_linkedin_export_or_a_same_named_file_replaces_the_old_one(person, people):
+    bob = person("bob@example.com")
+    bob.post("/api/builder/sources", files=[("sources", ("jan.zip", make_zip(LINKEDIN))), ("sources", ("cv.txt", b"old words here"))])
+    bob.post("/api/builder/sources", files=[("sources", ("feb.zip", make_zip(LINKEDIN))), ("sources", ("cv.txt", b"newer words here now"))])
+    names = sorted(s["name"] for s in bob.get("/api/builder/sources").json())
+    assert names == ["cv.txt", "feb.zip"]
+
+
+def test_there_is_a_limit_to_how_many_files_one_person_keeps(person, people):
+    bob = person("bob@example.com")
+    for n in range(generate.MAX_STORED_SOURCES):
+        assert bob.post("/api/builder/sources", files=[("sources", (f"f{n}.txt", b"some words"))]).json()["rejected"] == []
+    over = bob.post("/api/builder/sources", files=[("sources", ("one-more.txt", b"some words"))]).json()
+    assert over["added"] == [] and "up to" in over["rejected"][0]["problem"]
+    assert len(bob.get("/api/builder/sources").json()) == generate.MAX_STORED_SOURCES
+
+
+def test_kept_files_are_private_and_only_their_owner_can_remove_them(person, people):
+    bob, carol = person("bob@example.com"), person("carol@example.com")
+    mine = bob.post("/api/builder/sources", files=[("sources", ("secret.txt", b"BOBS-PRIVATE-WORDS"))]).json()["added"][0]["id"]
+    assert carol.get("/api/builder/sources").json() == [] and "BOBS-PRIVATE" not in carol.get("/api/builder/sources").text
+    assert carol.delete(f"/api/builder/sources/{mine}").status_code == 404
+    assert len(bob.get("/api/builder/sources").json()) == 1  # carol's attempt changed nothing
+    assert bob.delete(f"/api/builder/sources/{mine}").status_code == 200 and bob.get("/api/builder/sources").json() == []
+
+
+def test_drafting_again_after_one_more_engagement_needs_nothing_else(person, people, monkeypatch):
+    accepts(monkeypatch)
+    fake = Fake(monkeypatch, [GOOD_YAML, GOOD_YAML])
+    bob = person("bob@example.com")
+    bob.put("/api/api-key", json={"key": KEY_A})
+    bob.post("/api/builder/sources", files=[("sources", ("export.zip", make_zip(LINKEDIN)))])
+    assert bob.post("/api/generate-resume").status_code == 200
+    bob.post("/api/engagements", json=ENGAGEMENT)
+    assert bob.post("/api/generate-resume").status_code == 200  # no upload this time
+    second = fake.calls[1]["messages"][0]["content"]
+    assert "Globex" in second and "Acme" in second and "Engagement 1" in second  # the kept LinkedIn text and the new engagement
+
+
+def test_a_draft_is_kept_for_a_reload_and_is_private(person, people, monkeypatch):
+    bob, carol = person("bob@example.com"), person("carol@example.com")
+    assert bob.get("/api/builder/draft").json() == {"draft": None}
+    bob.put("/api/builder/draft", json={"resume_yaml": "basics:\n  name: Bob\n", "person_id": None})
+    assert bob.get("/api/builder/draft").json()["draft"]["resume_yaml"].startswith("basics")
+    assert carol.get("/api/builder/draft").json() == {"draft": None}
+    bob.put("/api/builder/draft", json={"resume_yaml": "basics:\n  name: Bobby\n"})  # one draft each: replaced, not added
+    assert "Bobby" in bob.get("/api/builder/draft").json()["draft"]["resume_yaml"]
+    assert bob.delete("/api/builder/draft").status_code == 200 and bob.get("/api/builder/draft").json() == {"draft": None}
+
+
+def test_keeping_files_is_on_by_default_and_turning_it_off_deletes_what_was_kept(person, people):
+    bob = person("bob@example.com")
+    assert bob.get("/api/builder/notes").json()["keep_files"] is True
+    bob.post("/api/builder/sources", files=[("sources", ("cv.txt", b"some words here"))])
+    bob.put("/api/builder/draft", json={"resume_yaml": "basics: {}"})
+    bob.post("/api/engagements", json=ENGAGEMENT)
+    assert bob.put("/api/builder/keep", json={"keep": False}).json() == {"keep_files": False}
+    assert bob.get("/api/builder/sources").json() == [] and bob.get("/api/builder/draft").json() == {"draft": None}
+    assert len(bob.get("/api/engagements").json()) == 1  # engagements and notes are typed in on purpose; they stay
+    assert bob.put("/api/builder/keep", json={"keep": True}).json() == {"keep_files": True}
+
+
+def test_the_choice_is_each_persons_own(person, people):
+    bob, carol = person("bob@example.com"), person("carol@example.com")
+    bob.put("/api/builder/keep", json={"keep": False})
+    assert carol.get("/api/builder/notes").json()["keep_files"] is True
+    carol.post("/api/builder/sources", files=[("sources", ("cv.txt", b"some words here"))])
+    bob.put("/api/builder/keep", json={"keep": False})
+    assert len(carol.get("/api/builder/sources").json()) == 1
+
+
+def test_when_files_are_not_kept_nothing_is_stored_and_the_files_ride_with_each_draft(person, people, monkeypatch):
+    accepts(monkeypatch)
+    fake = Fake(monkeypatch, [GOOD_YAML])
+    bob = person("bob@example.com")
+    bob.put("/api/api-key", json={"key": KEY_A})
+    bob.put("/api/builder/keep", json={"keep": False})
+    refused = bob.post("/api/builder/sources", files=[("sources", ("cv.txt", b"some words here"))])
+    assert refused.status_code == 409 and bob.put("/api/builder/draft", json={"resume_yaml": "x"}).status_code == 409
+    seen = bob.post("/api/builder/inspect", files=[("sources", ("export.zip", make_zip(LINKEDIN))), ("sources", ("cv.txt", b"one two three"))]).json()["files"]
+    assert seen[0]["found"]["Positions"] == 3 and seen[1]["summary"] == "3 words read"
+    resp = bob.post("/api/generate-resume", files=[("sources", ("old.txt", b"SENT-WITH-THE-DRAFT"))])
+    assert resp.status_code == 200 and "SENT-WITH-THE-DRAFT" in fake.calls[0]["messages"][0]["content"]
+    assert bob.get("/api/builder/sources").json() == [] and bob.get("/api/builder/draft").json() == {"draft": None}
+    with __import__("app.database", fromlist=["SessionLocal"]).SessionLocal() as db:
+        from shared_python import owned
+
+        with owned.unscoped():
+            assert db.query(models.SourceFile).count() == 0 and db.query(models.BuilderDraft).count() == 0
+
+
+def test_a_generated_draft_is_kept_and_it_cannot_point_at_someone_elses_resume(person, people, monkeypatch):
+    accepts(monkeypatch)
+    Fake(monkeypatch, [GOOD_YAML])
+    bob, carol = person("bob@example.com"), person("carol@example.com")
+    bob.put("/api/api-key", json={"key": KEY_A})
+    bob.post("/api/engagements", json=ENGAGEMENT)
+    assert bob.post("/api/generate-resume").status_code == 200
+    assert bob.get("/api/builder/draft").json()["draft"]["resume_yaml"] == GOOD_YAML.strip()
+    carols = make_resume(carol)
+    assert bob.put("/api/builder/draft", json={"resume_yaml": "basics: {}", "person_id": carols}).status_code == 404
 
 
 def test_the_preview_summarises_a_draft_and_names_what_is_wrong(person, people):
@@ -496,12 +625,12 @@ def test_a_persons_key_is_deleted_with_the_rest_of_their_data(person, people, mo
     with SessionLocal() as db:
         gone = crud.delete_user_data(db, people["bob"])
     assert gone["keys"] == 1 and gone["engagements"] == 1
-    assert bob.get("/api/engagements").json() == [] and bob.get("/api/builder/notes").json() == {"notes": ""}
+    assert bob.get("/api/engagements").json() == [] and bob.get("/api/builder/notes").json() == {"notes": "", "keep_files": True}
 
 
 def test_everyone_with_an_account_gets_the_builder_page_and_nobody_else_does(person, people):
     for email in ("bob@example.com", ADMIN):
         page = person(email).get("/build.html")
-        assert page.status_code == 200 and "Build my resume" in page.text and "never stored" in page.text
+        assert page.status_code == 200 and "Build my resume" in page.text and "only their text" in page.text
     assert person("dana@example.com").get("/build.html").status_code == 403  # no account
     assert person("eve@example.com").get("/build.html").status_code == 403  # removed

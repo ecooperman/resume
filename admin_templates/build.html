@@ -22,11 +22,16 @@
     <section class="step" id="step-privacy">
       <h2><span class="step-num" aria-hidden="true">i</span>What happens to your files</h2>
       <ul class="plain-list">
-        <li>Your files are read on our server, in memory, and <strong>never stored</strong>.</li>
+        <li>Your files are read on our server. We keep <strong>only their text</strong> (never the original file), saved to your account and private to you, so when something changes you can update your resume without starting over. You can remove any file below at any time, and that deletes its text.</li>
         <li>Their text is sent to <strong>Anthropic</strong> (the company behind Claude) to write the draft, using <strong>your own</strong> account key, so the cost is on your account and not ours. A draft usually costs a few cents.</li>
         <li>From LinkedIn's data we read only the career parts (profile, positions, education, skills, certifications, projects). Your connections, messages and everything else in that file are never opened.</li>
         <li>The draft is shown to you first. It only becomes your resume when you press Save, and it stays private to you.</li>
       </ul>
+      <div class="radio-line">
+        <input type="checkbox" id="keep-files" checked>
+        <label for="keep-files">Keep my files and drafts on my account <span class="step-optional">recommended</span></label>
+      </div>
+      <p id="keep-hint" class="hint"></p>
     </section>
 
     <section class="step" id="step-key">
@@ -56,7 +61,8 @@
     </section>
 
     <section class="step" id="step-found">
-      <h2><span class="step-num" aria-hidden="true">&#10003;</span>What we found</h2>
+      <h2><span class="step-num" aria-hidden="true">&#10003;</span>What we have from you <span class="step-optional">saved to your account</span></h2>
+      <p class="hint">With <em>Keep my files</em> on, each file's text is kept here so you never have to add it again. A newer LinkedIn ZIP replaces the older one, and a file with the same name replaces its earlier copy.</p>
       <div id="found"></div>
     </section>
 
@@ -85,7 +91,8 @@
 
     <section class="step hidden" id="step-review">
       <h2><span class="step-num" aria-hidden="true">6</span>Check it, fix it, save it</h2>
-      <p class="hint">This is a first draft written by an AI, so read it. Change anything in the box on the left; the summary on the right follows as you type. Nothing is saved until you press Save.</p>
+      <p class="hint">This is a first draft written by an AI, so read it. Change anything in the box on the left; the summary on the right follows as you type. Unless you turned off keeping files, your changes here are kept as you make them, so a reload will not lose them, but it only becomes your resume when you press Save.</p>
+      <p id="draft-note" class="hint hidden"></p>
       <div class="review-grid">
         <div class="field">
           <label for="draft-yaml">Your resume (YAML)</label>
@@ -103,6 +110,7 @@
       <div id="save-fields" class="field-row"></div>
       <div class="item-actions">
         <button type="button" id="save-btn" class="save-btn">Save</button>
+        <button type="button" id="discard-btn" class="cancel-btn">Discard this draft</button>
         <span id="save-status" class="status" role="status"></span>
       </div>
     </section>

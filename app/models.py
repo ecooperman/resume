@@ -136,4 +136,37 @@ class BuilderNotes(Base, owned.OwnedMixin):
 
     id = Column(Integer, primary_key=True)
     notes = Column(Text, nullable=False, default="", server_default="")
+    # Their choice (on by default) of whether the builder keeps the text of their files and their unsaved draft. Off means nothing from
+    # a file is stored: it is held in their browser for the draft and a refresh starts them over.
+    keep_files = Column(Boolean, nullable=False, default=True, server_default="1")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class SourceFile(Base, owned.OwnedMixin):
+    """One thing a person gave the builder: LinkedIn's data export or an old resume. Only its extracted TEXT is kept (for a LinkedIn
+    ZIP, just the career files; never the original file, never connections or messages), so a later update starts from what they gave
+    before instead of asking again. `kind` is "linkedin" (a newer one replaces an older one) or "document"."""
+
+    __tablename__ = "source_files"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    kind = Column(String, nullable=False, default="document", server_default="document")
+    text = Column(Text, nullable=False, default="", server_default="")
+    found = Column(Text, nullable=False, default="{}", server_default="{}")  # JSON: {"Positions": 3, ...} for LinkedIn data
+    summary = Column(String, nullable=False, default="", server_default="")
+    size_bytes = Column(Integer, nullable=False, default=0, server_default="0")  # of the original upload, for display
+    added_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class BuilderDraft(Base, owned.OwnedMixin):
+    """The draft a person is reviewing and has not saved yet, so a reload (or coming back tomorrow) does not lose it. One per person.
+    `person_id` is the resume an update merges into, or null for a new one."""
+
+    __tablename__ = "builder_drafts"
+    __table_args__ = (UniqueConstraint("owner_id", name="uq_builder_drafts_owner"),)
+
+    id = Column(Integer, primary_key=True)
+    resume_yaml = Column(Text, nullable=False, default="", server_default="")
+    person_id = Column(Integer, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

@@ -7,7 +7,8 @@ to review and edit before it becomes their resume: a first draft synthesised by 
 human's eyes on it first.
 
 What is read, and what is not:
-* Uploads are read IN MEMORY, sent to Claude with the person's OWN key, and never stored (nothing is written to disk).
+* Uploads are read IN MEMORY and never written to disk. Only their extracted text is kept (app/builder.py, in the person's own
+  private rows, so an update can start from it); the text is sent to Claude with the person's OWN key.
 * Only the parts of LinkedIn's export that describe the person's career are used (a short allow-list below). The rest of that ZIP
   (connections, messages, ad data, ...) is never opened, let alone sent anywhere.
 * Every limit below exists because PDF, DOCX and ZIP parsing runs on our server and the files come from strangers: size, count,
@@ -198,6 +199,36 @@ def extract_text(filename: str, content: bytes) -> str:
     else:
         text = content.decode("utf-8", errors="ignore")
     return _cut(text)
+
+
+MAX_STORED_SOURCES = 20  # what one person may keep at a time
+
+
+def read_source(filename: str, content: bytes) -> dict:
+    """One uploaded file as what we keep of it: {kind, text, found, summary}. Only text: for LinkedIn's ZIP just the allow-listed
+    career files, for anything else the document's words. Raises ResumeGenerationError when it can't be read."""
+    check_files([(filename, content)])
+    ext = Path(filename).suffix.lower()
+    if ext == ".zip":
+        parts = read_linkedin_zip(content, filename)
+        counts = linkedin_counts(parts)
+        return {
+            "kind": "linkedin", "found": counts,
+            "text": "\n\n".join(f"--- {part} ---\n{_cut(text)}" for part, text in parts.items()),
+            "summary": "LinkedIn data export: " + ", ".join(f"{n} {part.lower()}" for part, n in counts.items() if n),
+        }
+    text = extract_text(filename, content)
+    if ext == ".pdf" and len(text.strip()) < 50:
+        raise ResumeGenerationError(f"{filename} has no readable text (it may be a scan or a picture). Upload a text version instead.")
+    kind = "linkedin" if ext == ".json" and "linkedin" in filename.lower() else "document"
+    return {"kind": kind, "found": {}, "text": text, "summary": f"{len(text.split())} words read"}
+
+
+def assemble_sources(rows: List[Tuple[str, str, str]]) -> Tuple[Optional[str], List[Tuple[str, str]]]:
+    """(LinkedIn text or None, [(filename, text)] for the rest) from stored (kind, name, text) rows."""
+    linkedin = [text for kind, _name, text in rows if kind == "linkedin"]
+    documents = [(name, text) for kind, name, text in rows if kind != "linkedin"]
+    return ("\n\n".join(linkedin) or None), documents
 
 
 def prepare_sources(files: List[Tuple[str, bytes]]) -> Tuple[Optional[str], List[Tuple[str, str]]]:

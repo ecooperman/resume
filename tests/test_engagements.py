@@ -91,10 +91,10 @@ def test_new_engagements_belong_to_the_signed_in_person_whatever_the_request_say
 
 def test_notes_are_kept_per_person_and_bounded(person, people):
     bob, carol = person("bob@example.com"), person("carol@example.com")
-    assert bob.get("/api/builder/notes").json() == {"notes": ""}
+    assert bob.get("/api/builder/notes").json() == {"notes": "", "keep_files": True}
     assert bob.put("/api/builder/notes", json={"notes": "  leave out my first job \x00 "}).json() == {"notes": "leave out my first job"}
     bob.put("/api/builder/notes", json={"notes": "changed"})
-    assert bob.get("/api/builder/notes").json() == {"notes": "changed"} and carol.get("/api/builder/notes").json() == {"notes": ""}
+    assert bob.get("/api/builder/notes").json() == {"notes": "changed", "keep_files": True} and carol.get("/api/builder/notes").json() == {"notes": "", "keep_files": True}
     assert bob.put("/api/builder/notes", json={"notes": "x" * 5001}).status_code == 422
 
 

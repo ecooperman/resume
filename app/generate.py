@@ -250,6 +250,10 @@ Rules:
   sources show as current, with no end date, gets `end: Present`. Never write an end date that is not in the sources.
 - The person's own notes and the engagements they described are the most reliable sources. When one of them corrects something in
   the LinkedIn data or an old resume (an end date, a title, a company name), follow the correction, and do not repeat the old value.
+- Copy numbers and statistics exactly as the sources state them, and add no qualifier they do not (do not turn "500,000 transactions"
+  into "500,000 transactions daily", or "over 60" into "all").
+- A client or project that an uploaded resume describes in a printed bullet keeps that bullet under the same job, even when the person
+  also saved it as an engagement. Engagements add data; they never replace a bullet the resumes already had.
 - Write printed bullets for past jobs in the past tense, even when the source notes use the present tense.
 - Be comprehensive, not resume-length. Include every job, every bullet-
   worthy accomplishment, every skill, every certification you can find

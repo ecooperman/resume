@@ -352,6 +352,15 @@ def update_engagement(engagement_id: int, body: builder.EngagementIn, db: Sessio
     return builder.to_out(row)
 
 
+@app.delete("/api/engagements")
+def delete_all_engagements(confirm: str = "", db: Session = Depends(get_db)):
+    """Remove ALL of this person's engagements. Needs `?confirm=all`, so a stray call (or a forgotten id on the single-delete URL)
+    can never wipe them. The page asks the person first."""
+    if confirm != "all":
+        raise HTTPException(status_code=400, detail="Removing every engagement needs confirm=all.")
+    return {"removed": builder.delete_all_engagements(db)}
+
+
 @app.delete("/api/engagements/{engagement_id}")
 def delete_engagement(engagement_id: int, db: Session = Depends(get_db)):
     if not builder.delete_engagement(db, engagement_id):

@@ -196,3 +196,23 @@ def test_invisible_characters_are_stripped_from_saved_engagements_and_notes(pers
     saved = add(bob, client="﻿Acme​ Corp", outcomes=["​Did a thing﻿"])
     assert saved["client"] == "Acme Corp" and saved["outcomes"] == ["Did a thing"]
     assert bob.put("/api/builder/notes", json={"notes": "﻿hello​"}).json()["notes"] == "hello"
+
+
+# --- Remove all engagements: only the caller's own, and only when confirm=all is sent ---------------------------------------------
+
+def test_remove_all_deletes_only_my_engagements_and_needs_the_confirm(person, people):
+    bob, carol = person("bob@example.com"), person("carol@example.com")
+    for name in ("A", "B", "C"):
+        add(bob, client=name)
+    add(carol, client="Carols")
+    assert bob.delete("/api/engagements").status_code == 400  # no confirm: nothing happens
+    assert bob.delete("/api/engagements?confirm=yes").status_code == 400
+    assert len(bob.get("/api/engagements").json()) == 3
+    resp = bob.delete("/api/engagements?confirm=all")
+    assert resp.status_code == 200 and resp.json() == {"removed": 3}
+    assert bob.get("/api/engagements").json() == []
+    assert [e["client"] for e in carol.get("/api/engagements").json()] == ["Carols"]  # carol's are untouched
+
+
+def test_remove_all_with_none_saved_is_harmless(person, people):
+    assert person("bob@example.com").delete("/api/engagements?confirm=all").json() == {"removed": 0}

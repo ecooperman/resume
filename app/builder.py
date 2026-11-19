@@ -155,6 +155,15 @@ def update_engagement(db: Session, engagement_id: int, body: EngagementIn) -> Op
     return row
 
 
+def delete_all_engagements(db: Session) -> int:
+    """Remove every one of the signed-in person's engagements (only theirs: the list is the owner-scoped one). How many were removed."""
+    rows = list_engagements(db)
+    for row in rows:
+        db.delete(row)
+    db.commit()
+    return len(rows)
+
+
 def delete_engagement(db: Session, engagement_id: int) -> bool:
     row = get_engagement(db, engagement_id)
     if row is None:

@@ -399,7 +399,26 @@ function renderEngagements() {
     })
   );
   Global.iconifyButtons && Global.iconifyButtons(host);
+  $("remove-all-box").classList.toggle("hidden", engagements.length < 2); // one is removed with its own Remove button
   updateDraftButton();
+}
+
+async function removeAllEngagements() {
+  const n = engagements.length;
+  if (!n) return;
+  if (!confirm(`Remove ALL ${n} of your engagements?\n\nThis deletes every one of them from your account and cannot be undone. Your LinkedIn data, old resumes and notes are not touched. Future drafts will not use these engagements unless you add them again.`)) return;
+  if (!confirm(`Last check: really delete all ${n} engagements?`)) return;
+  const button = $("remove-all-engagements");
+  button.disabled = true;
+  try {
+    const result = await Global.fetchJSON("/api/engagements?confirm=all", { method: "DELETE" });
+    Global.showMessage(`Removed ${result.removed} engagement${result.removed === 1 ? "" : "s"}.`, "success");
+  } catch (err) {
+    Global.showMessage(err.message, "error");
+  } finally {
+    button.disabled = false;
+    await loadEngagements();
+  }
 }
 
 // A text box that turns what you type into removable chips (Enter or a comma adds one).
@@ -911,6 +930,7 @@ async function start() {
   renderMode();
   $("add-engagement").addEventListener("click", () => openEngagementForm(null));
   $("import-engagements").addEventListener("click", openImport);
+  $("remove-all-engagements").addEventListener("click", removeAllEngagements);
   $("notes").addEventListener("input", () => {
     saveNotesSoon();
     updateDraftButton();

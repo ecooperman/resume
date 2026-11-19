@@ -759,7 +759,7 @@ async function draft() {
       await Global.fetchJSON("/api/builder/notes", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ notes: $("notes").value }) });
       return Global.fetchJSON("/api/generate-resume", { method: "POST", body: data });
     });
-    showReview(result.resume_yaml);
+    await showReview(result.resume_yaml);
     $("draft-note").classList.add("hidden");
     Global.showMessage(target ? "Update ready. Look at what changed, fix anything, then Save." : "Draft ready. Read it through below, fix anything, then Save.", "success");
   } catch (err) {
@@ -776,13 +776,18 @@ let previewRound = 0;
 let previewTimer = null;
 let lastPreview = { ok: false };
 
-function showReview(yamlText, { scroll = true, keepReview = false } = {}) {
+async function showReview(yamlText, { scroll = true, keepReview = false } = {}) {
   if (!keepReview) rememberReview(null); // a fresh draft has not been reviewed
   $("step-review").classList.remove("hidden");
-  $("draft-yaml").value = yamlText;
+  const box = $("draft-yaml");
+  box.value = yamlText;
+  box.scrollTop = 0; // a re-draft must not open partway down the text or the summary of the one before
+  box.setSelectionRange(0, 0);
+  $("preview").scrollTop = 0;
   renderSaveFields();
-  refreshPreview();
-  if (scroll) $("step-review").scrollIntoView({ behavior: "smooth", block: "start" });
+  await refreshPreview(); // so the page has its final height before it scrolls
+  // In a frame, so it happens when the tab is actually showing (a draft takes a minute, and people look at something else meanwhile).
+  if (scroll) requestAnimationFrame(() => $("step-review").scrollIntoView({ behavior: "smooth", block: "start" }));
 }
 
 // The draft being reviewed is kept on the server as it is edited, so a reload or coming back tomorrow does not lose it.
@@ -830,7 +835,7 @@ async function restoreDraft() {
   target = saved.person_id ? myPeople.find((p) => p.id === saved.person_id) || null : null;
   await loadTarget();
   renderMode();
-  showReview(saved.resume_yaml, { scroll: false, keepReview: true });
+  await showReview(saved.resume_yaml, { scroll: false, keepReview: true });
   const note = $("draft-note");
   note.textContent = `This is the draft you were working on (last changed ${new Date(saved.updated_at).toLocaleString()}). It is not saved as your resume yet.`;
   note.classList.remove("hidden");

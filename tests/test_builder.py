@@ -647,6 +647,7 @@ def test_the_drafting_prompt_keeps_dates_exact_and_engagements_to_what_the_perso
     prompt = generate._build_system_prompt()
     assert "never stretch a later job's start" in prompt and "end: Present" in prompt  # a promotion is two jobs, each with its own dates
     assert "never guess client_does, industry, role, regulated or dates" in prompt
-    assert "add no qualifier they do not" in prompt  # no "daily" or "all" the sources never said
+    assert "add no qualifier they do not" in prompt  # no "all" or "exactly" the sources never said
+    assert "describes the company, not what the person did" in prompt  # SMITH's "About" blurb is not his accomplishment
     assert "Engagements add data; they never replace a bullet" in prompt  # a resume's Cigna bullet is kept
     assert "most reliable sources" in prompt and "follow the correction" in prompt  # a note that fixes LinkedIn's data wins over it

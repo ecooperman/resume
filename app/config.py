@@ -9,6 +9,9 @@ PORT = 8040
 # admin pages load their theme from, so local iteration never means hand-editing a URL.
 ENV = os.environ.get("APP_ENV", "local")
 SHARED_ASSETS_BASE = "https://static.evancooperman.com" if ENV == "production" else "http://127.0.0.1:8070"
+# The resume's public pages and cover letters are rendered once into static files (and PDFs), so they must never carry the local host:
+# their tab icon always points at production, whatever APP_ENV was when they were built.
+PUBLIC_ASSETS_BASE = "https://static.evancooperman.com"
 
 # Resume-generation feature (see app/generate.py + admin_static's "Generate
 # a resume.yaml" section): calls the Anthropic API to synthesize a

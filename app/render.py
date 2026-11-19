@@ -24,6 +24,8 @@ from docx.shared import Pt, Inches, RGBColor
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
+from . import config
+
 ROOT = Path(__file__).resolve().parent.parent  # repo root, one level above app/
 TEMPLATES_DIR = ROOT / "templates"
 
@@ -53,7 +55,7 @@ def render_html(data, *, show_download_bar):
     data = _collapse_dashes(data)
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("resume.html.j2")
-    return template.render(show_download_bar=show_download_bar, **data)
+    return template.render(show_download_bar=show_download_bar, shared_assets_base=config.PUBLIC_ASSETS_BASE, **data)
 
 
 def redact(data):
@@ -139,6 +141,7 @@ def render_cover_letter_html(basics, cover_letter_text):
     template = env.get_template("cover_letter.html.j2")
     return template.render(
         basics=basics,
+        shared_assets_base=config.PUBLIC_ASSETS_BASE,
         paragraphs=_cover_letter_paragraphs(cover_letter_text),
         today=date.today().strftime("%B %-d, %Y"),
     )

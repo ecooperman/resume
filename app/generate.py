@@ -248,6 +248,8 @@ Rules:
   company, keep them as two separate jobs, each with its own dates, and never stretch a later job's start back to the earlier
   one's (to leave the earlier one off the printed resume, set include_in_resume: false on it and leave the dates alone). A job the
   sources show as current, with no end date, gets `end: Present`. Never write an end date that is not in the sources.
+- The person's own notes and the engagements they described are the most reliable sources. When one of them corrects something in
+  the LinkedIn data or an old resume (an end date, a title, a company name), follow the correction, and do not repeat the old value.
 - Write printed bullets for past jobs in the past tense, even when the source notes use the present tense.
 - Be comprehensive, not resume-length. Include every job, every bullet-
   worthy accomplishment, every skill, every certification you can find

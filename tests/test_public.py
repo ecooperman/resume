@@ -169,3 +169,12 @@ def test_only_the_three_pages_exist_here_and_none_of_them_changes_anything(publi
     assert public.post("/", json={}).status_code == 405
     assert public.get("/api/people").status_code == 404
     assert public.get("/api/users").status_code == 404
+
+
+def test_public_pages_carry_the_tab_icon_from_the_production_host_whatever_the_environment():
+    import yaml
+    from app import config, render
+    data = yaml.safe_load((config.ROOT / "example-resume.yaml").read_text()) if hasattr(config, "ROOT") else yaml.safe_load(open("example-resume.yaml"))
+    for html in (render.render_html(data, show_download_bar=False), render.render_cover_letter_html(data["basics"], "Dear team,\n\nHello.")):
+        assert 'href="https://static.evancooperman.com/logo.svg"' in html and 'href="https://static.evancooperman.com/favicon.png"' in html
+        assert "127.0.0.1" not in html  # never the local host, which would be baked into the built site

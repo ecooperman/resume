@@ -647,3 +647,4 @@ def test_the_drafting_prompt_keeps_dates_exact_and_engagements_to_what_the_perso
     prompt = generate._build_system_prompt()
     assert "never stretch a later job's start" in prompt and "end: Present" in prompt  # a promotion is two jobs, each with its own dates
     assert "never guess client_does, industry, role, regulated or dates" in prompt
+    assert "most reliable sources" in prompt and "follow the correction" in prompt  # a note that fixes LinkedIn's data wins over it

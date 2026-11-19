@@ -421,6 +421,7 @@ def generate_resume_yaml(
 
 
 MAX_IMPORT_CHARS = 30_000  # one pasted client list
+MAX_ENGAGEMENT_OUTCOME = 1000  # one line of what came of an engagement; real bullets run long, so this is far above the 300 of the other fields
 
 _IMPORT_SYSTEM = """You turn a list of clients and projects that a person pasted (often an outline from a notes app) into structured
 records, one per client or project. Reply with ONLY a JSON array, no commentary and no code fence. Each element is an object with
@@ -469,7 +470,7 @@ def extract_engagements(api_key: str, text: str) -> List[dict]:
         if not isinstance(item, dict) or not _fit(item.get("client"), 300):
             continue
         regulated = item.get("regulated") if item.get("regulated") in ("yes", "no", "unknown") else "unknown"
-        outcomes = [_fit(o, 300) for o in (item.get("outcomes") or []) if isinstance(o, (str, int, float))][:10]
+        outcomes = [_fit(o, MAX_ENGAGEMENT_OUTCOME) for o in (item.get("outcomes") or []) if isinstance(o, (str, int, float))][:10]
         techs = [_fit(t, 60) for t in (item.get("technologies") or []) if isinstance(t, str)][:30]
         out.append({
             "client": _fit(item.get("client"), 300), "employer": _fit(item.get("employer"), 300), "client_does": _fit(item.get("client_does"), 300),

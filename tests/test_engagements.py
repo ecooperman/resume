@@ -34,7 +34,7 @@ def test_only_the_client_is_required_and_the_rest_has_sensible_defaults(person, 
 
 @pytest.mark.parametrize("bad", [
     {"client": ""}, {"client": "   "}, {"client": "x" * 301}, {"regulated": "maybe"}, {"technologies": ["t"] * 31}, {"technologies": ["x" * 61]},
-    {"outcomes": ["o"] * 11}, {"outcomes": ["x" * 301]}, {"role": "x" * 301}, {"client": 5, "technologies": "Go"},
+    {"outcomes": ["o"] * 11}, {"outcomes": ["x" * 1001]}, {"role": "x" * 301}, {"client": 5, "technologies": "Go"},
 ])
 def test_the_forms_rules_are_enforced_by_the_server(person, people, bad):
     bob = person("bob@example.com")
@@ -216,3 +216,15 @@ def test_remove_all_deletes_only_my_engagements_and_needs_the_confirm(person, pe
 
 def test_remove_all_with_none_saved_is_harmless(person, people):
     assert person("bob@example.com").delete("/api/engagements?confirm=all").json() == {"removed": 0}
+
+
+def test_a_long_outcome_line_is_kept_whole_not_cut_mid_word(person, people, monkeypatch):
+    accepts(monkeypatch)
+    long_line = "Built workflows in Adobe Workfront to facilitate content approvals " * 8 + "and finished the audit trail."
+    assert 300 < len(long_line) < generate.MAX_ENGAGEMENT_OUTCOME
+    Fake(monkeypatch, [json.dumps([{"client": "Abbott", "outcomes": [long_line]}])])
+    bob = with_key(person("bob@example.com"))
+    proposed = bob.post("/api/engagements/import", json={"text": LIST}).json()["engagements"][0]
+    assert proposed["outcomes"] == [long_line.strip()]  # whole, ending with its own last word
+    saved = bob.post("/api/engagements", json=proposed)
+    assert saved.status_code == 200 and saved.json()["outcomes"] == [long_line.strip()]

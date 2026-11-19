@@ -19,6 +19,7 @@ MAX_TEXT = 300
 MAX_TECHNOLOGIES = 30
 MAX_TECHNOLOGY = 60
 MAX_OUTCOMES = 10
+MAX_OUTCOME = generate.MAX_ENGAGEMENT_OUTCOME  # characters in one outcome line (the other text fields stop at MAX_TEXT)
 MAX_NOTES = 5000
 REGULATED = ("yes", "no", "unknown")
 
@@ -77,7 +78,7 @@ class EngagementIn(BaseModel):
     def _outcomes(cls, value):
         if len(value) > MAX_OUTCOMES:
             raise ValueError(f"At most {MAX_OUTCOMES} outcomes")
-        return [item for item in (_line(item) for item in value) if item]
+        return [item for item in (_line(item, MAX_OUTCOME) for item in value) if item]
 
 
 class EngagementOut(BaseModel):

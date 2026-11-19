@@ -3,13 +3,13 @@ only one draft at a time. (Their own Anthropic key pays for the AI part; this pr
 on purpose: a restart simply forgets, which is harmless for a limit this small."""
 import threading
 import time
-from typing import Dict, List
+from typing import Dict, Hashable, List
 
 MAX_DRAFTS = 6
 WINDOW_SECONDS = 3600
 
 _lock = threading.Lock()
-_recent: Dict[int, List[float]] = {}
+_recent: Dict[Hashable, List[float]] = {}
 _running: set = set()
 
 
@@ -17,8 +17,8 @@ class TooBusy(Exception):
     """Say so in words the person can act on."""
 
 
-def start(person_id: int, now: float = None) -> None:
-    """Take a draft slot for this person, or raise TooBusy. Call finish() when it is over, whether it worked or not."""
+def start(person_id: Hashable, now: float = None) -> None:
+    """Take a draft slot for this person (or for any other key, such as ("import", id), which then has its own count), or raise TooBusy. Call finish() when it is over, whether it worked or not."""
     now = time.time() if now is None else now
     with _lock:
         if person_id in _running:
@@ -32,7 +32,7 @@ def start(person_id: int, now: float = None) -> None:
         _running.add(person_id)
 
 
-def finish(person_id: int) -> None:
+def finish(person_id: Hashable) -> None:
     with _lock:
         _running.discard(person_id)
 

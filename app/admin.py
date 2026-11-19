@@ -310,6 +310,31 @@ def create_engagement(body: builder.EngagementIn, db: Session = Depends(get_db))
         raise HTTPException(status_code=409, detail=str(e))
 
 
+class ImportIn(BaseModel):
+    text: str
+
+
+@app.post("/api/engagements/import")
+def import_engagements(
+    body: ImportIn,
+    account: Account = Depends(accounts_gate.current_account),
+    db: Session = Depends(get_db),
+):
+    """Read a pasted list of clients and projects (an outline from a notes app, say) and PROPOSE engagements from it. Nothing is
+    saved: the page shows them for the person to tick and add, through the ordinary create route. Their own Anthropic key pays."""
+    api_key = apikeys.require(db, account.is_admin)
+    try:
+        limits.start(("import", account.id))
+    except limits.TooBusy as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    try:
+        return {"engagements": generate.extract_engagements(api_key, body.text), "room": max(0, builder.MAX_ENGAGEMENTS - len(builder.list_engagements(db)))}
+    except generate.ResumeGenerationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        limits.finish(("import", account.id))
+
+
 @app.put("/api/engagements/{engagement_id}", response_model=builder.EngagementOut)
 def update_engagement(engagement_id: int, body: builder.EngagementIn, db: Session = Depends(get_db)):
     row = builder.update_engagement(db, engagement_id, body)

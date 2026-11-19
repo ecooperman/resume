@@ -16,6 +16,7 @@ What is read, and what is not:
 """
 import csv
 import io
+import json
 import re
 import zipfile
 from pathlib import Path
@@ -343,6 +344,27 @@ def _extract_yaml(text: str) -> str:
     return match.group(1) if match else text
 
 
+MODEL = "claude-opus-5"
+
+
+def _ask_claude(client, system: str, messages: list, max_tokens: int) -> str:
+    """One call to Claude; the text of its answer. Every way it can fail becomes a ResumeGenerationError whose message is safe to
+    show on the page (never Anthropic's own body: it can echo the key)."""
+    try:
+        response = client.messages.create(model=MODEL, max_tokens=max_tokens, system=system, messages=messages)
+    except anthropic.AuthenticationError:
+        raise ResumeGenerationError("Anthropic didn't accept your key. Check it in step 1 (it may have been deleted or revoked).")
+    except anthropic.PermissionDeniedError:
+        raise ResumeGenerationError("Your Anthropic key isn't allowed to use this model. Check the key's permissions in the Anthropic console.")
+    except anthropic.RateLimitError:
+        raise ResumeGenerationError("Anthropic says your key has hit a rate or spending limit. Wait a little, or check your plan, then try again.")
+    except anthropic.APIConnectionError:
+        raise ResumeGenerationError("Couldn't reach Anthropic. Try again in a minute.")
+    except anthropic.APIStatusError as e:
+        raise ResumeGenerationError(f"Anthropic had a problem ({e.status_code}). Try again in a minute.")
+    return "".join(block.text for block in response.content if block.type == "text")
+
+
 def generate_resume_yaml(
     api_key: str,
     linkedin_text: Optional[str],
@@ -362,24 +384,7 @@ def generate_resume_yaml(
 
     last_error = None
     for attempt in range(2):
-        try:
-            response = client.messages.create(
-                model="claude-opus-5",
-                max_tokens=12000,
-                system=system,
-                messages=messages,
-            )
-        except anthropic.AuthenticationError:
-            raise ResumeGenerationError("Anthropic didn't accept your key. Check it in step 1 (it may have been deleted or revoked).")
-        except anthropic.PermissionDeniedError:
-            raise ResumeGenerationError("Your Anthropic key isn't allowed to use this model. Check the key's permissions in the Anthropic console.")
-        except anthropic.RateLimitError:
-            raise ResumeGenerationError("Anthropic says your key has hit a rate or spending limit. Wait a little, or check your plan, then try again.")
-        except anthropic.APIConnectionError:
-            raise ResumeGenerationError("Couldn't reach Anthropic. Try again in a minute.")
-        except anthropic.APIStatusError as e:
-            raise ResumeGenerationError(f"Anthropic had a problem ({e.status_code}). Try again in a minute.")  # never the body: it can echo the key
-        raw = "".join(block.text for block in response.content if block.type == "text")
+        raw = _ask_claude(client, system, messages, max_tokens=12000)
         candidate = _extract_yaml(raw)
         try:
             parsed = yaml.safe_load(candidate)
@@ -399,3 +404,66 @@ def generate_resume_yaml(
                 }
             )
     raise ResumeGenerationError(f"Claude's response never became valid resume YAML: {last_error}")
+
+
+MAX_IMPORT_CHARS = 30_000  # one pasted client list
+
+_IMPORT_SYSTEM = """You turn a list of clients and projects that a person pasted (often an outline from a notes app) into structured
+records, one per client or project. Reply with ONLY a JSON array, no commentary and no code fence. Each element is an object with
+exactly these keys:
+  client: who the work was for (the client or project name). Required. Without any bracketed or numbered decoration.
+  employer: the company the person worked for at the time, if the text says (e.g. a name in brackets after the client). Else "".
+  client_does: what the client does, ONLY if stated. Else "".
+  industry: the client's industry, ONLY if stated or unmistakable from the text. Else "".
+  regulated: "yes" only if the text says it was regulated or names a regulation or compliance process (GDPR, HIPAA, MLR, SOX...); else "unknown".
+  regulators: who regulates it, only when regulated is "yes". Else "".
+  technologies: array of the specific products, languages, platforms and tools the text names for that client.
+  role: the person's role, ONLY if stated. Else "".
+  start, end: dates, ONLY if stated. Else "".
+  outcomes: array of strings, one per accomplishment or fact about the work, keeping the person's own wording (fix only typos). Fold
+    sub-points into the line they belong to, or keep them as their own lines. Never invent numbers, results or names.
+Never add anything that is not in the text. A client with no details beneath it still gets a record (just client and employer).
+Ignore headings that are not clients (such as the title of the list)."""
+
+
+def _fit(value, limit: int) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f\u200b-\u200d\u2060\ufeff]", " ", str(value or ""))).strip()[:limit]
+
+
+def extract_engagements(api_key: str, text: str) -> List[dict]:
+    """Split a pasted list of clients and projects into proposed engagements (plain dicts shaped like builder.EngagementIn, every field
+    already cut to its limit). Nothing is saved here: the person reviews them first. Raises ResumeGenerationError."""
+    if not api_key:
+        raise ResumeGenerationError("No Anthropic key to read the list with.")
+    text = re.sub(r"[\u200b-\u200d\u2060\ufeff]", "", text or "").strip()
+    if not text:
+        raise ResumeGenerationError("Paste your list of clients or projects first.")
+    if len(text) > MAX_IMPORT_CHARS:
+        raise ResumeGenerationError(f"That list is too long to read in one go (about {MAX_IMPORT_CHARS:,} characters at most). Paste it in two halves.")
+    client = anthropic.Anthropic(api_key=api_key)
+    raw = _ask_claude(client, _IMPORT_SYSTEM, [{"role": "user", "content": text}], max_tokens=12000)
+    raw = _extract_yaml(raw)  # also strips a code fence (a ```json one included is handled below)
+    raw = re.sub(r"^json\s*", "", raw)
+    try:
+        items = json.loads(raw)
+        if not isinstance(items, list):
+            raise ValueError("not a list")
+    except ValueError:
+        raise ResumeGenerationError("Claude's answer couldn't be read as a list of clients. Try again, or add them one at a time.")
+    out = []
+    for item in items:
+        if not isinstance(item, dict) or not _fit(item.get("client"), 300):
+            continue
+        regulated = item.get("regulated") if item.get("regulated") in ("yes", "no", "unknown") else "unknown"
+        outcomes = [_fit(o, 300) for o in (item.get("outcomes") or []) if isinstance(o, (str, int, float))][:10]
+        techs = [_fit(t, 60) for t in (item.get("technologies") or []) if isinstance(t, str)][:30]
+        out.append({
+            "client": _fit(item.get("client"), 300), "employer": _fit(item.get("employer"), 300), "client_does": _fit(item.get("client_does"), 300),
+            "industry": _fit(item.get("industry"), 300), "regulated": regulated,
+            "regulators": _fit(item.get("regulators"), 300) if regulated == "yes" else "", "technologies": [t for t in dict.fromkeys(techs) if t],
+            "role": _fit(item.get("role"), 300), "start": _fit(item.get("start"), 300), "end": _fit(item.get("end"), 300),
+            "outcomes": [o for o in outcomes if o], "confidential": False,
+        })
+    if not out:
+        raise ResumeGenerationError("No clients or projects were found in that text.")
+    return out

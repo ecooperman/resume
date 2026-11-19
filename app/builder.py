@@ -25,7 +25,7 @@ REGULATED = ("yes", "no", "unknown")
 
 def _line(value: object, limit: int = MAX_TEXT) -> str:
     """One line of plain text: control characters out, runs of spaces folded. Too long is an error, not a quiet cut."""
-    text = re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f]", " ", str(value or ""))).strip()
+    text = re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f]", " ", re.sub(r"[\u200b-\u200d\u2060\ufeff]", "", str(value or "")))).strip()
     if len(text) > limit:
         raise ValueError(f"That's too long (at most {limit} characters)")
     return text
@@ -103,7 +103,7 @@ class NotesIn(BaseModel):
     @field_validator("notes")
     @classmethod
     def _notes(cls, value):
-        value = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", value or "").strip()
+        value = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", re.sub(r"[\u200b-\u200d\u2060\ufeff]", "", value or "")).strip()
         if len(value) > MAX_NOTES:
             raise ValueError(f"The notes are too long ({MAX_NOTES} characters at most)")
         return value

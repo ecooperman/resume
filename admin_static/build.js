@@ -494,7 +494,7 @@ function openEngagementForm(existingEntry) {
   ]);
   const close = () => {
     $("engagement-form").replaceChildren();
-    $("add-engagement").classList.remove("hidden");
+    $("add-buttons").classList.remove("hidden");
   };
   cancel.addEventListener("click", close);
   save.addEventListener("click", async () => {
@@ -528,10 +528,128 @@ function openEngagementForm(existingEntry) {
       save.disabled = false;
     }
   });
-  $("add-engagement").classList.add("hidden");
+  $("add-buttons").classList.add("hidden");
+  $("import-box").replaceChildren();
   $("engagement-form").replaceChildren(form);
   Global.iconifyButtons && Global.iconifyButtons(form);
   client.input.focus();
+}
+
+// Paste a whole list of clients (an outline from a notes app, say) and have Claude propose one engagement per client. Nothing is saved
+// until the person ticks the ones they want and presses Add; each can then be opened and completed with the ordinary form.
+function openImport() {
+  const sameAs = (a, b) => a.client.trim().toLowerCase() === b.client.trim().toLowerCase() && (a.employer || "").trim().toLowerCase() === (b.employer || "").trim().toLowerCase();
+  const box = $("import-box");
+  const close = () => {
+    box.replaceChildren();
+    $("add-buttons").classList.remove("hidden");
+  };
+  const text = el("textarea", { rows: "12", placeholder: "Paste your list here: one client or project per item, with what you did underneath.", "aria-label": "Your list of clients and projects" });
+  const problem = el("p", { class: "hint is-error hidden" });
+  const status = el("span", { class: "status", role: "status" });
+  const find = el("button", { type: "button", class: "save-btn", "data-btn-icon": "zap", text: "Find the clients" });
+  const cancel = el("button", { type: "button", class: "cancel-btn", text: "Cancel" });
+
+  const review = (proposed, room) => {
+    const picked = proposed.map((p) => !engagements.some((e) => sameAs(e, p)));
+    const count = el("p", { class: "hint" });
+    const add = el("button", { type: "button", class: "save-btn", text: "Add the selected" });
+    const back = el("button", { type: "button", class: "cancel-btn", text: "Back to the list" });
+    const err = el("p", { class: "hint is-error hidden" });
+    const refresh = () => {
+      const n = picked.filter(Boolean).length;
+      count.textContent = `${n} of ${proposed.length} selected.` + (n > room ? ` You can keep ${room} more engagements, so remove some ticks or delete older ones first.` : "");
+      add.disabled = n === 0 || n > room;
+    };
+    const cards = proposed.map((p, i) => {
+      const tick = el("input", { type: "checkbox", id: `imp-${i}`, "aria-label": `Add ${p.client}` });
+      tick.checked = picked[i];
+      tick.addEventListener("change", () => {
+        picked[i] = tick.checked;
+        refresh();
+      });
+      const dupe = engagements.some((e) => sameAs(e, p));
+      const sub = [p.employer && `at ${p.employer}`, p.industry, p.role, [p.start, p.end].filter(Boolean).join(" - ")].filter(Boolean).join(" · ");
+      return el("div", { class: "engagement-card" }, [
+        tick,
+        el("label", { class: "engagement-main", for: `imp-${i}` }, [
+          el("strong", { text: p.client }),
+          ...(dupe ? [el("span", { class: "hint", text: " (already added, so not ticked)" })] : []),
+          ...(sub ? [el("div", { class: "engagement-sub", text: sub })] : []),
+          ...(p.outcomes.length ? [el("div", { class: "engagement-sub", text: `${p.outcomes.length} point${p.outcomes.length === 1 ? "" : "s"}: ${p.outcomes[0]}${p.outcomes.length > 1 ? " ..." : ""}` })] : []),
+          el("div", {}, p.technologies.map((t) => el("span", { class: "chip", text: t }))),
+        ]),
+      ]);
+    });
+    back.addEventListener("click", () => {
+      box.replaceChildren(form);
+    });
+    add.addEventListener("click", async () => {
+      err.classList.add("hidden");
+      add.disabled = true;
+      let added = 0;
+      const failed = [];
+      for (let i = 0; i < proposed.length; i++) {
+        if (!picked[i]) continue;
+        try {
+          await Global.fetchJSON("/api/engagements", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(proposed[i]) });
+          added++;
+        } catch (e) {
+          failed.push(`${proposed[i].client}: ${e.message}`);
+        }
+      }
+      await loadEngagements();
+      if (failed.length) {
+        err.textContent = `Added ${added}, but not: ${failed.join("; ")}`;
+        err.classList.remove("hidden");
+        add.disabled = false;
+        return;
+      }
+      close();
+      Global.showMessage(`Added ${added} engagement${added === 1 ? "" : "s"}. Open any of them to fill in dates, your role or the industry.`, "success");
+    });
+    const view = el("div", { class: "engagement" }, [
+      el("p", { class: "hint", text: "Here is what we found. Untick anything that is not a client or project, then add them. Nothing is saved until you press Add." }),
+      ...cards, count, err,
+      el("div", { class: "item-actions" }, [add, back, cancel]),
+    ]);
+    refresh();
+    Global.iconifyButtons && Global.iconifyButtons(view);
+    box.replaceChildren(view);
+  };
+
+  const form = el("div", { class: "engagement" }, [
+    el("p", { class: "hint", text: "Copy it from wherever you keep it (numbered lists, bullets and indents are all fine). We read it with your own Anthropic key and propose one engagement per client for you to check. We only use what the list says; nothing is invented, and nothing is saved until you confirm." }),
+    el("div", { class: "field" }, [text]),
+    problem,
+    el("div", { class: "item-actions" }, [find, cancel, status]),
+  ]);
+  cancel.addEventListener("click", close);
+  find.addEventListener("click", async () => {
+    problem.classList.add("hidden");
+    if (!text.value.trim()) {
+      problem.textContent = "Paste your list first.";
+      problem.classList.remove("hidden");
+      return;
+    }
+    find.disabled = true;
+    status.textContent = "Reading your list. This usually takes under a minute.";
+    try {
+      const result = await Global.fetchJSON("/api/engagements/import", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ text: text.value }) });
+      review(result.engagements, result.room);
+    } catch (err) {
+      problem.textContent = err.message;
+      problem.classList.remove("hidden");
+    } finally {
+      find.disabled = false;
+      status.textContent = "";
+    }
+  });
+  $("add-buttons").classList.add("hidden");
+  $("engagement-form").replaceChildren();
+  box.replaceChildren(form);
+  Global.iconifyButtons && Global.iconifyButtons(form);
+  text.focus();
 }
 
 // --- step 5: what to do (new draft or update), and draft ------------------------------------------------------------------------
@@ -792,6 +910,7 @@ async function start() {
   dropzone($("drop-resumes"), { accept: ".pdf,.docx,.txt,.md", prompt: "Drop your old resumes here", multiple: true });
   renderMode();
   $("add-engagement").addEventListener("click", () => openEngagementForm(null));
+  $("import-engagements").addEventListener("click", openImport);
   $("notes").addEventListener("input", () => {
     saveNotesSoon();
     updateDraftButton();

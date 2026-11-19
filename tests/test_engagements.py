@@ -110,3 +110,89 @@ def test_removing_a_user_deletes_their_engagements_and_notes_with_the_rest(perso
         assert crud.delete_user_data(db, people["bob"])["engagements"] == 1
     with owned.scope(people["bob"]), SessionLocal() as db:
         assert db.query(models.Engagement).count() == 0 and db.query(models.BuilderNotes).count() == 0
+
+
+# --- Importing a pasted list: Claude proposes engagements, nothing is saved until the person adds them ------------------------------
+
+import json  # noqa: E402
+
+from app import generate, limits  # noqa: E402
+from tests.test_builder import KEY_A, Fake, accepts, key_storage  # noqa: E402,F401 - key_storage is an autouse fixture
+
+LIST = "Successful Delivered Clients\n\n1. Nikon (SMITH)\n​\n2. Bungie (Rightpoint)\n   1. Built an EDS implementation in about 3 months\n"
+PROPOSED = json.dumps([
+    {"client": "Nikon", "employer": "SMITH"},
+    {"client": "Bungie", "employer": "Rightpoint", "technologies": ["Adobe Commerce", "Adobe Commerce", "EDS"],
+     "outcomes": ["Built an EDS implementation in about 3 months"], "regulated": "no", "regulators": "SHOULD-BE-DROPPED"},
+])
+
+
+def with_key(who):
+    who.put("/api/api-key", json={"key": KEY_A})
+    return who
+
+
+def test_a_pasted_list_becomes_proposed_engagements_and_nothing_is_saved(person, people, monkeypatch):
+    accepts(monkeypatch)
+    fake = Fake(monkeypatch, [PROPOSED])
+    bob = with_key(person("bob@example.com"))
+    resp = bob.post("/api/engagements/import", json={"text": LIST})
+    assert resp.status_code == 200, resp.text
+    found = resp.json()["engagements"]
+    assert [(e["client"], e["employer"]) for e in found] == [("Nikon", "SMITH"), ("Bungie", "Rightpoint")]
+    assert found[1]["technologies"] == ["Adobe Commerce", "EDS"] and found[1]["regulators"] == ""  # repeats dropped, regulators only when regulated
+    assert resp.json()["room"] == 60
+    assert bob.get("/api/engagements").json() == []  # proposals only
+    assert fake.keys[-1] == KEY_A and "​" not in fake.calls[0]["messages"][0]["content"]  # their own key; invisible characters never sent
+
+
+def test_a_json_code_fence_around_the_answer_is_fine(person, people, monkeypatch):
+    accepts(monkeypatch)
+    Fake(monkeypatch, ["```json\n" + PROPOSED + "\n```"])
+    resp = with_key(person("bob@example.com")).post("/api/engagements/import", json={"text": LIST})
+    assert resp.status_code == 200 and len(resp.json()["engagements"]) == 2
+
+
+@pytest.mark.parametrize("answer", ["Sorry, I could not do that.", "{\"client\": \"x\"}", "[]", "[{\"employer\": \"no client\"}, 5]"])
+def test_an_answer_that_is_not_a_usable_list_is_a_plain_message(person, people, monkeypatch, answer):
+    accepts(monkeypatch)
+    Fake(monkeypatch, [answer])
+    resp = with_key(person("bob@example.com")).post("/api/engagements/import", json={"text": LIST})
+    assert resp.status_code == 400 and "detail" in resp.json()
+
+
+def test_overlong_fields_are_cut_so_every_proposal_can_be_added(person, people, monkeypatch):
+    accepts(monkeypatch)
+    Fake(monkeypatch, [json.dumps([{"client": "C" * 500, "outcomes": ["o" * 900] * 15, "technologies": [f"t{n}" for n in range(50)]}])])
+    bob = with_key(person("bob@example.com"))
+    proposed = bob.post("/api/engagements/import", json={"text": LIST}).json()["engagements"][0]
+    assert len(proposed["outcomes"]) == 10 and len(proposed["technologies"]) == 30
+    assert bob.post("/api/engagements", json=proposed).status_code == 200  # what is proposed is always acceptable to the create route
+
+
+def test_empty_or_huge_text_and_a_missing_key_are_refused_without_calling_claude(person, people, monkeypatch):
+    accepts(monkeypatch)
+    fake = Fake(monkeypatch, [PROPOSED])
+    bob = person("bob@example.com")
+    assert bob.post("/api/engagements/import", json={"text": LIST}).status_code in (400, 402, 403, 409)  # no key saved yet
+    with_key(bob)
+    assert bob.post("/api/engagements/import", json={"text": "  ​ "}).status_code == 400
+    assert bob.post("/api/engagements/import", json={"text": "x" * (generate.MAX_IMPORT_CHARS + 1)}).status_code == 400
+    assert fake.calls == []
+
+
+def test_the_import_has_its_own_hourly_limit_apart_from_drafts(person, people, monkeypatch):
+    accepts(monkeypatch)
+    Fake(monkeypatch, [PROPOSED] * (limits.MAX_DRAFTS + 2))
+    bob = with_key(person("bob@example.com"))
+    for _ in range(limits.MAX_DRAFTS):
+        assert bob.post("/api/engagements/import", json={"text": LIST}).status_code == 200
+    assert bob.post("/api/engagements/import", json={"text": LIST}).status_code == 429
+    assert all(isinstance(k, tuple) for k in limits._recent)  # counted under its own key, so it never uses up the person's drafts
+
+
+def test_invisible_characters_are_stripped_from_saved_engagements_and_notes(person, people):
+    bob = person("bob@example.com")
+    saved = add(bob, client="﻿Acme​ Corp", outcomes=["​Did a thing﻿"])
+    assert saved["client"] == "Acme Corp" and saved["outcomes"] == ["Did a thing"]
+    assert bob.put("/api/builder/notes", json={"notes": "﻿hello​"}).json()["notes"] == "hello"

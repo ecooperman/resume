@@ -253,15 +253,18 @@ Rules:
 - Copy numbers and statistics exactly as the sources state them, and add no qualifier they do not (do not turn "over 60" into "all",
   or "about 3 months" into "3 months").
 - A company's own marketing text (an "About <company>" blurb on a LinkedIn position, an agency's boast about its transactions or revenue)
-  describes the company, not what the person did. Do not print it as a bullet or put its figures in the summary; at most keep one short
-  factual line saying what kind of company it was.
+  describes the company, not what the person did. Do not print it as a bullet or put its figures in the summary, and do not print any
+  line that only describes what the company is or does ("X was a commerce agency...").
 - A client or project that an uploaded resume describes in a printed bullet keeps that bullet under the same job, even when the person
   also saved it as an engagement. Engagements add data; they never replace a bullet the resumes already had.
-- An engagement that has outcome lines and is not marked confidential gets ONE printed bullet under its job, unless that job already
-  has a bullet about the same client (then keep that bullet and add nothing). Start it with the client's name and a colon, like the
-  client bullets that are already there ("Cigna: ..."), and write it only from the person's own outcome lines and details: keep their
-  numbers and wording exactly, join a client's lines into one flowing bullet, and never add a number, result, technology, claim or
-  description of the client that they did not give. An engagement with no outcome lines prints nothing (it is only kept under the job).
+- Never print two bullets about the same work, in one job or across jobs. An engagement that has outcome lines and is not
+  marked confidential gets ONE printed bullet under its job, unless a bullet that covers the same client or the same work already
+  exists (even one that does not name the client, and even in the person's other job at the same company): then keep that bullet and
+  add nothing; if it does not name the client you may begin it with the client's name and a colon. Otherwise start the new bullet
+  with the client's name and a colon, like the client bullets already there ("Cigna: ..."), and write it only from the person's own
+  outcome lines and details: keep their numbers and wording exactly, join a client's lines into one flowing bullet, and never add a
+  number, result, technology, claim or description of the client that they did not give. An engagement with no outcome lines prints
+  nothing (it is only kept under the job).
 - Write printed bullets for past jobs in the past tense, even when the source notes use the present tense.
 - Be comprehensive, not resume-length. Include every job, every bullet-
   worthy accomplishment, every skill, every certification you can find

@@ -644,13 +644,15 @@ def test_page_scripts_carry_a_version_so_a_deploy_is_never_hidden_by_a_stale_cac
 
 
 def test_the_drafting_prompt_keeps_dates_exact_and_engagements_to_what_the_person_said():
-    prompt = generate._build_system_prompt()
+    prompt = " ".join(generate._build_system_prompt().split())  # line breaks in the prompt text do not matter
     assert "never stretch a later job's start" in prompt and "end: Present" in prompt  # a promotion is two jobs, each with its own dates
     assert "never guess client_does, industry, role, regulated or dates" in prompt
     assert "add no qualifier they do not" in prompt  # no "all" or "exactly" the sources never said
     assert "describes the company, not what the person did" in prompt  # SMITH's "About" blurb is not his accomplishment
     assert "Engagements add data; they never replace a bullet" in prompt  # a resume's Cigna bullet is kept
-    assert "gets ONE printed bullet under its job" in prompt and "outcome lines and is not marked confidential" in prompt  # engagements with outcomes print
+    assert "gets ONE printed bullet under its job" in prompt and "outcome lines and is not" in prompt  # engagements with outcomes print
     assert "never add a number, result, technology, claim or" in prompt and "prints nothing" in prompt  # only from their words; no outcomes, no bullet
     assert "unless the other sources already" not in prompt  # the old rule that kept engagements private is gone
+    assert "Never print two bullets about the same work" in prompt and "even one that does not name the client" in prompt  # no second Hazelden bullet
+    assert "do not print any" in prompt and "at most keep one short" not in prompt  # no 'SMITH was a commerce agency' line either
     assert "most reliable sources" in prompt and "follow the correction" in prompt  # a note that fixes LinkedIn's data wins over it

@@ -21,12 +21,14 @@ import zipfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import anthropic
+from shared_python.lazy import lazy_module
 import yaml
 from pypdf import PdfReader
 from docx import Document
 
 from . import config
+
+anthropic = lazy_module("anthropic")  # imported on first use: it is slow to load and most requests never call the AI
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_RESUME_PATH = ROOT / "example-resume.yaml"
@@ -164,28 +166,6 @@ def check_files(files: List[Tuple[str, bytes]]) -> None:
 def _cut(text: str) -> str:
     text = text.strip()
     return text[:MAX_DOCUMENT_CHARS] + "\n...(truncated)" if len(text) > MAX_DOCUMENT_CHARS else text
-
-
-def describe_file(filename: str, content: bytes) -> dict:
-    """What we make of one file, with no AI involved: {name, kind, ok, summary, found?}. This is the checklist on the page, so
-    someone sees the file was understood (or why not) before anything is sent anywhere."""
-    ext = Path(filename).suffix.lower()
-    try:
-        if ext == ".zip":
-            counts = linkedin_counts(read_linkedin_zip(content, filename))
-            return {"name": filename, "kind": "linkedin-zip", "ok": True, "found": counts,
-                    "summary": "LinkedIn data export: " + ", ".join(f"{n} {part.lower()}" for part, n in counts.items() if n)}
-        if ext == ".pdf":
-            text = _pdf_text(content, filename)
-            if len(text.strip()) < 50:
-                raise ResumeGenerationError(f"{filename} has no readable text (it may be a scan or a picture). Upload a text version instead.")
-            return {"name": filename, "kind": "pdf", "ok": True, "summary": f"{len(text.split())} words read"}
-        if ext == ".docx":
-            return {"name": filename, "kind": "docx", "ok": True, "summary": f"{len(_docx_text(content, filename).split())} words read"}
-        text = content.decode("utf-8", errors="ignore")
-        return {"name": filename, "kind": "text", "ok": True, "summary": f"{len(text.split())} words read"}
-    except ResumeGenerationError as e:
-        return {"name": filename, "kind": ext.lstrip("."), "ok": False, "summary": str(e)}
 
 
 def extract_text(filename: str, content: bytes) -> str:

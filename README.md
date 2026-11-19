@@ -12,8 +12,10 @@ app/
   render.py                <- the actual rendering pipeline (build.py and app/admin.py both use it)
   main.py                 <- public resume app (port 8040): serves public/<slug>/ or private/<slug>/
   admin.py                 <- admin API (port 8041, separate process - see "Access codes" below)
-  models.py, crud.py      <- access_codes + people tables (SQLAlchemy) - see "People" below
-admin_templates/           <- the two admin pages (People, Access codes), Jinja2 so the shared-assets URL is baked in
+  models.py, crud.py      <- access_codes, people, accounts and the builder's tables (SQLAlchemy)
+  generate.py, builder.py <- the resume builder: reading uploads, the Claude call, stored files/engagements/notes/draft
+  apikeys.py, limits.py   <- each person's own Anthropic key (encrypted) and the drafts-per-hour allowance
+admin_templates/           <- the admin pages (Build my resume, People, Access codes, Users), Jinja2 so the shared-assets URL is baked in
 admin_static/              <- their no-build-step JS and the little CSS that is specific to this app (served by app/admin.py)
 manage.py                 <- CLI alternative to the admin panel
 migrations/                <- Alembic, same pattern as the other apps here
@@ -28,7 +30,7 @@ lets people in on the Users page or the dashboard's People page), every resume a
 - **An ordinary account** has exactly one resume, with a slug nobody chooses (`u<id>-<random>`), never the site's default, never published. It can edit it,
   download a PDF or Word copy (rendered on the spot, with everything in it), and delete it. It cannot see anyone else's, and neither can an administrator.
 - **An administrator** can have several resumes, choose slugs, set the default, publish and un-publish, create access codes, and use the server's Anthropic key
-  for "Generate a resume.yaml from documents" (ordinary accounts will bring their own key in a later phase).
+  for the builder when they have not saved one of their own (an ordinary account must bring its own: see "The builder" below).
 - **Published** (`people.published`): the public site (`app/main.py`, port 8040, no sign-in) only ever shows a resume that is published, by `?person=`, as the
   default, or through an access code; anything else is a 404 exactly like an unknown slug. The migration published every existing resume (they were all public);
   new ones start unpublished (an administrator's form has a "Show on the public site" tick, on by default). `build.py` only builds published people.
@@ -132,29 +134,39 @@ YAML (with `include_in_resume: false` if you don't want it on your default
 printed version) means it's still there to draw on later, instead of lost
 because it got cut during the first pass.
 
-### Self-service: generating it without touching Claude directly
+### The builder: generating it without touching Claude directly
 
-The admin UI's **"Generate a resume.yaml from documents"** section (on the
-People page) does the above for you, so someone using this app doesn't
-need a Claude account or to write a prompt themselves:
+The **Build my resume** page (`/build.html`, in the sidebar) does the above for you, so someone using this app needs no Claude account and
+no prompt. Numbered steps:
 
-Use the **Build my resume** page (`/build.html`, in the sidebar): numbered steps that take your own Anthropic key (step 1), LinkedIn's
-official "Get a copy of your data" ZIP (step 2, with the exact clicks written out; only the career parts of it are ever read), old resumes
-as PDF/Word/text (step 3; drag and drop, many at once), a form for the engagements behind your work (step 4: client or project, which job it belongs to, what the client does, industry, regulated or not and by whom, technologies, your role, dates, outcomes, and a don't-name-this-client box for NDAs). Engagements and your notes are **saved to your account** (tables `engagements`, `builder_notes`, private to you), so every later draft uses them; they ride in resume.yaml as an optional `engagements:` list under the matching job that is never printed, so a later step can tailor the resume to a job. When you already have a resume the page defaults to **Update**: drop a fresh LinkedIn ZIP and the draft is merged INTO your current resume (your hand edits are kept, only what is new or changed is added, your saved engagements are authoritative) and the review shows exactly which lines it changes. "What we found" shows how each file was understood before
-anything is sent. Press **Draft my resume**; the draft opens beside a readable summary (step 6) for you to fix, and only **Save** makes it
-your resume (an ordinary account replaces its one private resume, an administrator adds a person, never published automatically).
+1. **Your Anthropic key.** Each person brings their own, saved encrypted (`app/apikeys.py`; the droplet needs `KEY_ENCRYPTION_SECRET` in
+   `/etc/personal-apps/shared.env`). An administrator with no key of their own falls back to the server's `ANTHROPIC_API_KEY`; nobody else ever does.
+2. **LinkedIn's "Get a copy of your data" ZIP**, with the clicks written out. It must be the *larger data archive*: the pick-individual-files
+   option leaves out jobs. Only the career files in it are ever read (profile, positions, education, skills, certifications, projects, languages,
+   honors, publications, volunteering, courses, email addresses); connections and messages are never opened.
+3. **Old resumes** as PDF, Word or text, as many versions as there are.
+4. **Engagements**: a form per client or project (which job, what the client does, industry, regulated or not and by whom, technologies, role,
+   dates, outcomes, and a don't-name-this-client box for NDAs). They ride in resume.yaml as an optional `engagements:` list under the matching job,
+   never printed, so a later step can tailor the resume to a job.
+5. **Notes**, then **Draft my resume**. With a resume already saved the page defaults to **Update**: the draft is merged INTO the current resume (hand
+   edits kept, only what is new or changed added, the saved engagements authoritative) and the review shows exactly which lines it changes.
+6. **Check it, fix it, save it.** The draft opens beside a readable summary; only **Save** makes it the person's resume (an ordinary account replaces its
+   one private resume; an administrator adds a person, never published automatically).
 
-Under the hood this is the same Claude call described above (see
-`app/generate.py`), with the prompt and file-reading done server-side. It spends
-the PERSON'S OWN Anthropic key (saved encrypted, `app/apikeys.py`, needs
-`KEY_ENCRYPTION_SECRET` on the droplet); an administrator with no key of their own
-falls back to `ANTHROPIC_API_KEY`. Uploads are read in memory and the original file is never kept; only its extracted text is (LinkedIn: just the career CSVs), per person in `source_files`, so an update starts from what they gave before, and the unsaved draft is kept in `builder_drafts` so a reload loses nothing (both deleted with the person's data; each person can switch keeping off, `builder_notes.keep_files`, in which case files ride with each draft request and nothing is stored);
-limits (12 files, 8 MB each, 25 MB total, 40 PDF pages, ZIP entry and unpacked-size
-caps) guard the server, and each person can draft 6 times an hour, one at a time
-(`app/limits.py`). The LinkedIn export itself never touches LinkedIn's servers or
-scrapes anyone else's data - it's the extension reading your own already-
-authenticated profile page's DOM, the same legitimate pattern the
-extension's job-scoring features already use, not automated scraping.
+What is kept, per person and private to them (tables `source_files`, `engagements`, `builder_notes`, `builder_drafts`): the *text* of each uploaded
+file (never the original; for LinkedIn only the career CSVs), the engagements, the notes, and the unsaved draft, so a reload loses nothing and adding one
+engagement then pressing Draft is a full update with no re-upload. A newer LinkedIn ZIP replaces the older one; a file with the same name replaces its
+earlier copy; 20 files at most. A **Keep my files and drafts on my account** checkbox (on by default, `builder_notes.keep_files`) is the opt-out:
+turning it off deletes what was kept, and from then on files are held in the browser only and sent with each draft (read in memory, nothing stored),
+so a refresh starts over; engagements and notes are still saved. All of it is deleted with the person's data.
+
+Limits guard the server: 12 files, 8 MB each, 25 MB total, 40 PDF pages, ZIP entry-count and unpacked-size caps, and 6 drafts an hour per person,
+one at a time (`app/limits.py`, in memory, so a restart resets it). The model call itself is in `app/generate.py`. Everything uploaded is treated as material to
+read, never as instructions to follow.
+
+Routes (all behind the dashboard sign-in plus an account here, no internal token, since they are for a browser): `/api/api-key`,
+`/api/builder/sources` (add, list, remove a kept file), `/api/builder/inspect` (read files without keeping them), `/api/builder/notes`,
+`/api/builder/keep`, `/api/builder/draft`, `/api/builder/preview`, `/api/engagements`, and `POST /api/generate-resume`.
 
 ## Access codes
 
@@ -170,7 +182,7 @@ link is just `?code=<token>` - no `?person=` needed, since the code already
 says who it's for.
 
 **Admin panel** (day-to-day way to manage codes): `resume-admin.evancooperman.com`,
-behind the dashboard sign-in like the other apps (or, until the cutover in `DEPLOYMENT.md`, Cloudflare Access). Pick who a
+behind the dashboard sign-in like the other apps. Pick who a
 new code is for, create it, copy the shareable link, and revoke, all from
 the browser - no SSH needed.
 
@@ -204,8 +216,8 @@ back to the public/redacted version, same as an invalid or expired one.
 Every resume - including the default one this site itself renders - is a
 row in this app's own `access.db` (`app/models.Person`: `slug`, `name`,
 `resume_yaml`, `is_default`), managed entirely through the "People" section
-of the admin page (same hostname/port as the access-code admin below,
-gated the same way - Cloudflare Access on this hostname, nothing else).
+of the admin page (same hostname/port as the access-code admin above,
+gated the same way - the dashboard sign-in plus an account in this app).
 There is deliberately no file-based resume storage anywhere in this repo
 any more - `evan-resume.yaml`/`rach-resume.yaml` were the old approach,
 replaced because this repo is public on GitHub (a committed resume file's
@@ -256,10 +268,7 @@ shell before running `uvicorn app.admin:app`; on the droplet, set it in
 `/etc/systemd/system/resume-admin.service` (never commit the real value -
 see `deploy/resume-admin.service` for the placeholder line).
 
-`app/admin.py` also serves the builder's routes (`/api/api-key`, `/api/builder/inspect`, `/api/builder/preview`, `POST /api/generate-resume`).
-They are gated like the rest of the admin UI (the dashboard sign-in plus an account here, no internal token) since they are for a
-browser, not for another app. Drafting needs the signed-in person's own saved Anthropic key (an administrator may use the server's
-`ANTHROPIC_API_KEY` from `/etc/personal-apps/shared.env`).
+`app/admin.py` also serves the builder's routes; see "The builder" above.
 
 ## Local setup
 
@@ -383,9 +392,10 @@ for the second service.
      block *everyone* - so it needs a `Bypass` policy (or its own Access
      application with a Bypass action) carved out in the Zero Trust
      dashboard, scoped to just this hostname.
-   - `resume-admin.evancooperman.com`: leave it alone. It should stay
-     covered by the wildcard Access app like every other app here - same
-     email + one-time-PIN login. Don't add a Bypass policy for this one.
+   - `resume-admin.evancooperman.com`: never add a Bypass for this one. It
+     is gated by the app itself (the dashboard sign-in plus an account here),
+     whether or not the Cloudflare Access wildcard still sits in front of it;
+     `../DEPLOYMENT.md` says where the cutover to the dashboard sign-in stands.
 
    Do the Bypass carve-out deliberately, on the specific hostname, not by
    loosening the wildcard app itself - so admin (and your other apps) stay

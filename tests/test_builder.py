@@ -454,14 +454,14 @@ def blank_pdf(pages):
 def test_a_huge_pdf_and_a_pdf_with_no_text_are_explained():
     with pytest.raises(generate.ResumeGenerationError, match="limit is 40"):
         generate.extract_text("long.pdf", blank_pdf(generate.MAX_PDF_PAGES + 1))
-    described = generate.describe_file("scan.pdf", blank_pdf(1))
-    assert described["ok"] is False and "no readable text" in described["summary"]
+    with pytest.raises(generate.ResumeGenerationError, match="no readable text"):
+        generate.read_source("scan.pdf", blank_pdf(1))
 
 
 def test_a_broken_pdf_or_word_file_is_a_message(person, people, monkeypatch):
     for name in ("x.pdf", "x.docx"):
-        described = generate.describe_file(name, b"this is not that kind of file")
-        assert described["ok"] is False and ("Couldn't read" in described["summary"] or "isn't a valid ZIP" in described["summary"])
+        with pytest.raises(generate.ResumeGenerationError, match="Couldn't read|isn't a valid ZIP"):
+            generate.read_source(name, b"this is not that kind of file")
 
 
 def test_a_word_file_is_read(person, people, monkeypatch):
@@ -469,7 +469,8 @@ def test_a_word_file_is_read(person, people, monkeypatch):
     doc.add_paragraph("Senior engineer at Acme for five years")
     out = io.BytesIO()
     doc.save(out)
-    assert generate.describe_file("cv.docx", out.getvalue()) == {"name": "cv.docx", "kind": "docx", "ok": True, "summary": "7 words read"}
+    read = generate.read_source("cv.docx", out.getvalue())
+    assert read["kind"] == "document" and read["summary"] == "7 words read" and "Senior engineer at Acme" in read["text"]
 
 
 # --- the "what we found" checklist and the review summary -------------------------------------------------------------------

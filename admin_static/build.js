@@ -357,6 +357,13 @@ const INDUSTRIES = [
   "Real estate", "Software and technology", "Non-profit", "Consulting",
 ];
 
+// Back to the top of the engagements list (or, with none yet, the proposals under it). Reading a pasted list swaps a tall box for a
+// different one, which leaves the page wherever the browser lands, often down at a later step; this puts the person where the result is.
+function scrollToEngagements() {
+  const target = $("engagements").children.length ? $("engagements") : $("import-box");
+  requestAnimationFrame(() => target.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+
 async function loadEngagements() {
   try {
     engagements = await Global.withLoading($("engagements"), Global.fetchJSON("/api/engagements"));
@@ -630,6 +637,7 @@ function openImport() {
         return;
       }
       close();
+      scrollToEngagements();
       Global.showMessage(`Added ${added} engagement${added === 1 ? "" : "s"}. Open any of them to fill in dates, your role or the industry.`, "success");
     });
     const view = el("div", { class: "engagement" }, [
@@ -640,6 +648,7 @@ function openImport() {
     refresh();
     Global.iconifyButtons && Global.iconifyButtons(view);
     box.replaceChildren(view);
+    scrollToEngagements();
   };
 
   const form = el("div", { class: "engagement" }, [

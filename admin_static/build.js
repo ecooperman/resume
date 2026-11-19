@@ -55,7 +55,7 @@ function saveNotesSoon() {
 
 async function loadKey() {
   try {
-    keyStatus = await Global.fetchJSON("/api/api-key");
+    keyStatus = await Global.withLoading($("key-body"), Global.fetchJSON("/api/api-key"));
   } catch (err) {
     Global.showMessage(err.message, "error");
   }
@@ -72,7 +72,7 @@ function renderKey() {
     remove.addEventListener("click", async () => {
       if (!confirm("Remove your saved key? You can add it again any time.")) return;
       try {
-        keyStatus = await Global.fetchJSON("/api/api-key", { method: "DELETE" });
+        keyStatus = await Global.withLoading($("key-body"), Global.fetchJSON("/api/api-key", { method: "DELETE" }));
         renderKey();
         updateDraftButton();
       } catch (err) {
@@ -115,7 +115,7 @@ function renderKey() {
         save.disabled = true;
         problem.classList.add("hidden");
         try {
-          const result = await Global.fetchJSON("/api/api-key", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ key: input.value }) });
+          const result = await Global.withLoading($("key-body"), Global.fetchJSON("/api/api-key", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ key: input.value }) }));
           keyStatus = result.status;
           if (result.note) Global.showMessage(result.note, "error");
           else Global.showMessage("Key saved.", "success");
@@ -197,7 +197,7 @@ async function addFiles(list, message) {
     accepted.forEach((f) => data.append("sources", f));
     Global.showMessage(accepted.length === 1 ? `Reading ${accepted[0].name}...` : `Reading ${accepted.length} files...`, "success", message);
     try {
-      const result = await Global.fetchJSON("/api/builder/sources", { method: "POST", body: data });
+      const result = await Global.withLoading(message.parentElement, Global.withLoading($("found"), Global.fetchJSON("/api/builder/sources", { method: "POST", body: data })));
       sources = result.sources;
       for (const r of result.rejected) problems.push(`${r.name}: ${r.problem}`);
       if (result.added.length && !problems.length) {
@@ -214,7 +214,7 @@ async function addFiles(list, message) {
 
 async function removeFile(source) {
   try {
-    await Global.fetchJSON(`/api/builder/sources/${source.id}`, { method: "DELETE" });
+    await Global.withLoading($("found"), Global.fetchJSON(`/api/builder/sources/${source.id}`, { method: "DELETE" }));
     sources = sources.filter((s) => s.id !== source.id);
   } catch (err) {
     Global.showMessage(err.message, "error");
@@ -231,7 +231,7 @@ async function checkLocal() {
   const data = new FormData();
   localFiles.forEach((f) => data.append("sources", f));
   try {
-    const result = await Global.fetchJSON("/api/builder/inspect", { method: "POST", body: data });
+    const result = await Global.withLoading($("found"), Global.fetchJSON("/api/builder/inspect", { method: "POST", body: data }));
     if (round !== checkRound) return;
     localChecks = result.files;
   } catch (err) {
@@ -252,7 +252,7 @@ function removeLocal(index) {
 
 async function loadSources() {
   try {
-    sources = await Global.fetchJSON("/api/builder/sources");
+    sources = await Global.withLoading($("found"), Global.fetchJSON("/api/builder/sources"));
   } catch (err) {
     Global.showMessage(err.message, "error");
   }
@@ -323,7 +323,7 @@ async function changeKeep() {
     }
   }
   try {
-    await Global.fetchJSON("/api/builder/keep", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ keep: wanted }) });
+    await Global.withLoading($("step-privacy"), Global.fetchJSON("/api/builder/keep", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ keep: wanted }) }));
   } catch (err) {
     Global.showMessage(err.message, "error");
     $("keep-files").checked = keep;
@@ -339,7 +339,7 @@ async function changeKeep() {
     localFiles = [];
     localChecks = [];
     try {
-      sources = (await Global.fetchJSON("/api/builder/sources", { method: "POST", body: data })).sources;
+      sources = (await Global.withLoading($("step-privacy"), Global.fetchJSON("/api/builder/sources", { method: "POST", body: data }))).sources;
     } catch (err) {
       Global.showMessage(err.message, "error");
     }
@@ -683,10 +683,12 @@ async function loadTarget() {
   targetEmployers = [];
   if (!target) return;
   try {
-    const full = await Global.fetchJSON(`/api/people/${target.id}`);
-    baseYaml = full.resume_yaml;
-    const summary = await Global.fetchJSON("/api/builder/preview", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ resume_yaml: baseYaml }) });
-    if (summary.ok) targetEmployers = summary.jobs.map((j) => j.company).filter(Boolean);
+    await Global.withLoading($("mode"), async () => {
+      const full = await Global.fetchJSON(`/api/people/${target.id}`);
+      baseYaml = full.resume_yaml;
+      const summary = await Global.fetchJSON("/api/builder/preview", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ resume_yaml: baseYaml }) });
+      if (summary.ok) targetEmployers = summary.jobs.map((j) => j.company).filter(Boolean);
+    });
   } catch (err) {
     Global.showMessage(err.message, "error");
   }
@@ -743,8 +745,10 @@ async function draft() {
   clearTimeout(notesTimer);
   try {
     // The notes are saved first so the draft uses what is on screen (engagements are already saved as they are made).
-    await Global.fetchJSON("/api/builder/notes", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ notes: $("notes").value }) });
-    const result = await Global.fetchJSON("/api/generate-resume", { method: "POST", body: data });
+    const result = await Global.withLoading($("step-draft"), async () => {
+      await Global.fetchJSON("/api/builder/notes", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ notes: $("notes").value }) });
+      return Global.fetchJSON("/api/generate-resume", { method: "POST", body: data });
+    });
     showReview(result.resume_yaml);
     $("draft-note").classList.add("hidden");
     Global.showMessage(target ? "Update ready. Look at what changed, fix anything, then Save." : "Draft ready. Read it through below, fix anything, then Save.", "success");
@@ -826,7 +830,7 @@ async function refreshPreview() {
   const round = ++previewRound;
   let result;
   try {
-    result = await Global.fetchJSON("/api/builder/preview", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ resume_yaml: $("draft-yaml").value, base_yaml: target ? baseYaml : null }) });
+    result = await Global.withLoading($("preview"), Global.fetchJSON("/api/builder/preview", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ resume_yaml: $("draft-yaml").value, base_yaml: target ? baseYaml : null }) }));
   } catch (err) {
     result = { ok: false, error: err.message };
   }
@@ -1039,7 +1043,7 @@ async function reviewWithAI() {
   $("ai-suggestions").replaceChildren();
   const text = $("draft-yaml").value;
   try {
-    const result = await Global.fetchJSON("/api/builder/review", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ resume_yaml: text }) });
+    const result = await Global.withLoading($("ai-suggestions"), Global.fetchJSON("/api/builder/review", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ resume_yaml: text }) }));
     rememberReview({ suggestions: result.suggestions, at: new Date().toISOString(), yaml: text });
   } catch (err) {
     Global.showMessage(err.message, "error");
@@ -1089,26 +1093,28 @@ async function save() {
   $("save-btn").disabled = true;
   $("save-status").textContent = "Saving...";
   try {
-    let saved;
-    if (replacing) {
-      saved = await Global.fetchJSON(`/api/people/${replacing.id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify({ resume_yaml: yamlText, name: lastPreview.name || replacing.name }) });
-    } else {
-      const body = { name: ($("save-name") && $("save-name").value.trim()) || lastPreview.name || "My resume", resume_yaml: yamlText };
-      if (me.is_admin) {
-        body.slug = $("save-slug").value.trim();
-        body.published = false; // never public by accident; publishing is a deliberate step on the People page
+    await Global.withLoading($("save-actions"), async () => {
+      let saved;
+      if (replacing) {
+        saved = await Global.fetchJSON(`/api/people/${replacing.id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify({ resume_yaml: yamlText, name: lastPreview.name || replacing.name }) });
+      } else {
+        const body = { name: ($("save-name") && $("save-name").value.trim()) || lastPreview.name || "My resume", resume_yaml: yamlText };
+        if (me.is_admin) {
+          body.slug = $("save-slug").value.trim();
+          body.published = false; // never public by accident; publishing is a deliberate step on the People page
+        }
+        saved = await Global.fetchJSON("/api/people", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
       }
-      saved = await Global.fetchJSON("/api/people", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
-    }
-    myPeople = await Global.fetchJSON("/api/people");
-    existing = me.is_admin ? existing : saved;
-    target = myPeople.find((p) => p.id === saved.id) || null; // the next update merges into what was just saved
-    await loadTarget();
-    renderMode();
-    await clearDraft(); // it is a resume now, no longer a draft
-    $("draft-note").classList.add("hidden");
-    $("save-status").replaceChildren(document.createTextNode("Saved. "), el("a", { href: "/", text: "Open my resume" }));
-    Global.showMessage("Saved.", "success");
+      myPeople = await Global.fetchJSON("/api/people");
+      existing = me.is_admin ? existing : saved;
+      target = myPeople.find((p) => p.id === saved.id) || null; // the next update merges into what was just saved
+      await loadTarget();
+      renderMode();
+      await clearDraft(); // it is a resume now, no longer a draft
+      $("draft-note").classList.add("hidden");
+      $("save-status").replaceChildren(document.createTextNode("Saved. "), el("a", { href: "/", text: "Open my resume" }));
+      Global.showMessage("Saved.", "success");
+    });
   } catch (err) {
     $("save-status").textContent = "";
     Global.showMessage(err.message, "error");

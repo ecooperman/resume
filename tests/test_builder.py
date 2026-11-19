@@ -650,4 +650,7 @@ def test_the_drafting_prompt_keeps_dates_exact_and_engagements_to_what_the_perso
     assert "add no qualifier they do not" in prompt  # no "all" or "exactly" the sources never said
     assert "describes the company, not what the person did" in prompt  # SMITH's "About" blurb is not his accomplishment
     assert "Engagements add data; they never replace a bullet" in prompt  # a resume's Cigna bullet is kept
+    assert "gets ONE printed bullet under its job" in prompt and "outcome lines and is not marked confidential" in prompt  # engagements with outcomes print
+    assert "never add a number, result, technology, claim or" in prompt and "prints nothing" in prompt  # only from their words; no outcomes, no bullet
+    assert "unless the other sources already" not in prompt  # the old rule that kept engagements private is gone
     assert "most reliable sources" in prompt and "follow the correction" in prompt  # a note that fixes LinkedIn's data wins over it

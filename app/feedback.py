@@ -177,7 +177,7 @@ def check_resume(data: dict, today: Optional[date] = None) -> List[dict]:
                 unused.append(client)
         if unused:
             listed = ", ".join(unused[:5]) + (f" and {len(unused) - 5} more" if len(unused) > 5 else "")
-            out.append(_item("tip", names[id(job)], f"{listed} {'is' if len(unused) == 1 else 'are'} saved as engagements for this job but not mentioned in any printed bullet. Engagements mostly help tailor the resume to a job; add a bullet if you want a client to show on the page.", [f"client: {unused[0]}", unused[0]] + _job_find(job)))
+            out.append(_item("tip", names[id(job)], f"{listed} {'is' if len(unused) == 1 else 'are'} saved as engagements for this job but not mentioned in any printed bullet. Engagements print as a bullet only when they have outcome lines; add outcomes to the engagement in step 4 (or write a bullet here) if you want a client to show on the page.", [f"client: {unused[0]}", unused[0]] + _job_find(job)))
 
     groups = [g for g in (data.get("skills") or []) if isinstance(g, dict)]
     items = [_text(i) for g in groups for i in (g.get("items") or []) if _text(i)]

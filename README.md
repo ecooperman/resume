@@ -147,8 +147,9 @@ no prompt. Numbered steps:
 3. **Old resumes** as PDF, Word or text, as many versions as there are.
 4. **Engagements**: a form per client or project (which job, what the client does, industry, regulated or not and by whom, technologies, role,
    dates, outcomes, and a don't-name-this-client box for NDAs). Already have them in a list (a notes-app outline, say)? **Paste a list of clients** has Claude propose one engagement per client from it
-   (using only what the list says); you tick the ones you want and they are added, then edited with the ordinary form (`POST /api/engagements/import`, which saves nothing, with its own hourly limit). **Remove all engagements** (shown when there are two or more) asks twice, then clears them (`DELETE /api/engagements?confirm=all`, only the caller's own). They ride in resume.yaml as an optional `engagements:` list under the matching job,
-   never printed, so a later step can tailor the resume to a job.
+   (using only what the list says); you tick the ones you want and they are added, then edited with the ordinary form (`POST /api/engagements/import`, which saves nothing, with its own hourly limit). **Remove all engagements** (shown when there are two or more) asks twice, then clears them (`DELETE /api/engagements?confirm=all`, only the caller's own). They ride in resume.yaml as an optional `engagements:` list under the matching job
+   (the list itself is never printed, so a later step can tailor the resume to a job). An engagement with outcome lines that is not confidential
+   also gets one printed bullet ("Client: ...") written only from the person's own words, unless the job already has a bullet for that client.
 5. **Notes**, then **Draft my resume**. With a resume already saved the page defaults to **Update**: the draft is merged INTO the current resume (hand
    edits kept, only what is new or changed added, the saved engagements authoritative) and the review shows exactly which lines it changes.
 6. **Check it, fix it, save it.** The draft opens beside a readable summary; only **Save** makes it the person's resume (an ordinary account replaces its

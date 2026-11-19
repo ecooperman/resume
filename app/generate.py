@@ -257,6 +257,11 @@ Rules:
   factual line saying what kind of company it was.
 - A client or project that an uploaded resume describes in a printed bullet keeps that bullet under the same job, even when the person
   also saved it as an engagement. Engagements add data; they never replace a bullet the resumes already had.
+- An engagement that has outcome lines and is not marked confidential gets ONE printed bullet under its job, unless that job already
+  has a bullet about the same client (then keep that bullet and add nothing). Start it with the client's name and a colon, like the
+  client bullets that are already there ("Cigna: ..."), and write it only from the person's own outcome lines and details: keep their
+  numbers and wording exactly, join a client's lines into one flowing bullet, and never add a number, result, technology, claim or
+  description of the client that they did not give. An engagement with no outcome lines prints nothing (it is only kept under the job).
 - Write printed bullets for past jobs in the past tense, even when the source notes use the present tense.
 - Be comprehensive, not resume-length. Include every job, every bullet-
   worthy accomplishment, every skill, every certification you can find
@@ -275,8 +280,7 @@ Rules:
   their role, outcomes), attach each one to the matching job (match by employer and dates) under that job's optional
   `engagements:` list, with exactly the field names and shapes in the schema's example. They are never printed; they let the
   resume be tailored to a job later. If one doesn't clearly belong to any job, put it under the closest job rather than dropping
-  it. Copy them faithfully, do not embellish: fill in only the fields the person gave and leave out every field they did not, even though the example below shows them all filled (never guess client_does, industry, role, regulated or dates from general knowledge). Do not turn their details into printed bullets unless the other sources already
-  support them. An engagement marked confidential must never have its client named in any printed bullet or the summary.
+  it. Copy them faithfully, do not embellish: fill in only the fields the person gave and leave out every field they did not, even though the example below shows them all filled (never guess client_does, industry, role, regulated or dates from general knowledge). Whether an engagement prints is covered by the printed-bullets rule above. An engagement marked confidential must never have its client named in any printed bullet or the summary.
 - Output ONLY the YAML content, no markdown code fences, no commentary
   before or after it. It must parse as YAML and have a top-level "basics"
   key.

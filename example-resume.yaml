@@ -41,7 +41,8 @@ experience:
       - Own the on-call rotation and incident-response process for the payments platform; introduced structured postmortems and reduced repeat incidents by 60% over two quarters.
       - Drove the team's migration from EC2 to Kubernetes (EKS), including writing the internal runbooks and training four engineers who'd never used Kubernetes before.
       - Partner directly with Product and Compliance to scope HIPAA-sensitive data-handling requirements before implementation starts, not after.
-    # Optional, and never printed on the resume: what the work was FOR, so a later step can tailor the resume to a job (for example
+    # Optional. This list is never printed itself (the builder may write a bullet from an engagement's outcomes into `bullets:` above):
+    # what the work was FOR, so a later step can tailor the resume to a job (for example
     # "regulated healthcare client", "Kubernetes"). Any of these fields can be left out. `regulated` is true, false or left out
     # (unknown); `confidential: true` means the client must never be named on anything printed.
     engagements:

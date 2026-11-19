@@ -244,6 +244,11 @@ Rules:
   aren't grounded in the source material. If a field genuinely isn't
   present anywhere, omit it (most fields are optional - see the schema)
   rather than guessing or writing a placeholder.
+- Dates are facts. Use each position's own start and end exactly as the sources give them. When someone held two titles at the same
+  company, keep them as two separate jobs, each with its own dates, and never stretch a later job's start back to the earlier
+  one's (to leave the earlier one off the printed resume, set include_in_resume: false on it and leave the dates alone). A job the
+  sources show as current, with no end date, gets `end: Present`. Never write an end date that is not in the sources.
+- Write printed bullets for past jobs in the past tense, even when the source notes use the present tense.
 - Be comprehensive, not resume-length. Include every job, every bullet-
   worthy accomplishment, every skill, every certification you can find
   across all the sources - even ones a person might normally trim off a
@@ -261,7 +266,7 @@ Rules:
   their role, outcomes), attach each one to the matching job (match by employer and dates) under that job's optional
   `engagements:` list, with exactly the field names and shapes in the schema's example. They are never printed; they let the
   resume be tailored to a job later. If one doesn't clearly belong to any job, put it under the closest job rather than dropping
-  it. Copy them faithfully, do not embellish. Do not turn their details into printed bullets unless the other sources already
+  it. Copy them faithfully, do not embellish: fill in only the fields the person gave and leave out every field they did not, even though the example below shows them all filled (never guess client_does, industry, role, regulated or dates from general knowledge). Do not turn their details into printed bullets unless the other sources already
   support them. An engagement marked confidential must never have its client named in any printed bullet or the summary.
 - Output ONLY the YAML content, no markdown code fences, no commentary
   before or after it. It must parse as YAML and have a top-level "basics"

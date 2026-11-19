@@ -641,3 +641,9 @@ def test_page_scripts_carry_a_version_so_a_deploy_is_never_hidden_by_a_stale_cac
     page = person("bob@example.com").get("/build.html").text
     for name in ("build.js", "nav.js", "style.css"):
         assert f"/{name}?v=" in page and f"/{name}?v=0" not in page  # versioned, and the file was found
+
+
+def test_the_drafting_prompt_keeps_dates_exact_and_engagements_to_what_the_person_said():
+    prompt = generate._build_system_prompt()
+    assert "never stretch a later job's start" in prompt and "end: Present" in prompt  # a promotion is two jobs, each with its own dates
+    assert "never guess client_does, industry, role, regulated or dates" in prompt

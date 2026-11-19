@@ -635,3 +635,9 @@ def test_everyone_with_an_account_gets_the_builder_page_and_nobody_else_does(per
         assert page.status_code == 200 and "Build my resume" in page.text and "only their text" in page.text
     assert person("dana@example.com").get("/build.html").status_code == 403  # no account
     assert person("eve@example.com").get("/build.html").status_code == 403  # removed
+
+
+def test_page_scripts_carry_a_version_so_a_deploy_is_never_hidden_by_a_stale_cache(person, people):
+    page = person("bob@example.com").get("/build.html").text
+    for name in ("build.js", "nav.js", "style.css"):
+        assert f"/{name}?v=" in page and f"/{name}?v=0" not in page  # versioned, and the file was found

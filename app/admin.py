@@ -48,6 +48,15 @@ def get_me(request: Request, account: Account = Depends(accounts_gate.current_ac
     return {"email": account.email, "is_admin": account.is_admin, "logout_url": oidc_login.logout_url(request)}
 
 
+def asset_v(name: str) -> str:
+    """A version for one of this app's own scripts or stylesheets: its last-modified time. Put on the URL (`/build.js?v=...`) so a
+    browser fetches the new file after a deploy instead of running a stale cached one next to the fresh page."""
+    try:
+        return str(int((ADMIN_STATIC_DIR / name).stat().st_mtime))
+    except OSError:
+        return "0"
+
+
 # The two admin pages are templates so the shared-assets URL is baked in server-side (see
 # config.SHARED_ASSETS_BASE). Registered before the static mount at the bottom, which serves
 # their app.js/style.css and so on.
@@ -55,7 +64,7 @@ def _page(name: str, admin_only: bool = False):
     def route(request: Request, account: Account = Depends(accounts_gate.current_account)):
         if admin_only and not account.is_admin:
             return RedirectResponse("/", status_code=302)  # not for them: back to their own resume
-        return templates.TemplateResponse(request, name, {"shared_assets_base": config.SHARED_ASSETS_BASE})
+        return templates.TemplateResponse(request, name, {"shared_assets_base": config.SHARED_ASSETS_BASE, "asset_v": asset_v})
 
     return route
 

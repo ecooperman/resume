@@ -6,7 +6,7 @@
   <title>Users · Resume</title>
   <link rel="stylesheet" href="{{ shared_assets_base }}/theme.css">
   <script src="{{ shared_assets_base }}/theme-init.js"></script>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v={{ asset_v('style.css') }}">
 </head>
 <body>
   <header class="app-header">
@@ -39,7 +39,7 @@
 
   <script src="{{ shared_assets_base }}/theme.js"></script>
   <script src="{{ shared_assets_base }}/icons.js"></script>
-  <script src="/nav.js"></script>
-  <script src="/users.js"></script>
+  <script src="/nav.js?v={{ asset_v('nav.js') }}"></script>
+  <script src="/users.js?v={{ asset_v('users.js') }}"></script>
 </body>
 </html>

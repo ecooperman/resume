@@ -342,3 +342,51 @@ textarea.yaml {
   margin: 4px 0;
   font-size: 14px;
 }
+
+.suggestions {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+}
+
+.suggestion {
+  margin: 0 0 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.suggestion.fix {
+  border-left-color: var(--danger);
+}
+
+.suggestion.tip {
+  border-left-color: var(--border-strong);
+}
+
+.suggestion.ai {
+  border-left-color: var(--accent);
+}
+
+.suggestion.ok {
+  border-left-color: var(--success);
+  color: var(--muted);
+}
+
+.suggestion-tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--muted-bg);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.suggestion .hint {
+  margin: 2px 0 0;
+}

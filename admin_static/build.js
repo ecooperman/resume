@@ -828,10 +828,12 @@ async function refreshPreview() {
   if (!result.ok) {
     host.replaceChildren(el("p", { class: "preview-error", text: result.error }));
     $("save-btn").disabled = true;
+    $("feedback-box").classList.add("hidden");
     return;
   }
   $("save-btn").disabled = false;
   renderDiff(result.changes);
+  renderSuggestions(result.suggestions || []);
   const nameField = document.getElementById("save-name");
   if (nameField && !nameField.dataset.touched) nameField.value = result.name || "";
   host.replaceChildren(
@@ -844,6 +846,53 @@ async function refreshPreview() {
       el("ul", {}, job.bullets.map((b) => el("li", { text: b }))),
     ])
   );
+}
+
+// Quick rule-based suggestions (the server sends them with every preview) and, on request, an AI editor's. Neither changes the draft.
+function renderSuggestions(list) {
+  $("feedback-box").classList.remove("hidden");
+  const host = $("suggestions");
+  if (!list.length) {
+    host.replaceChildren(el("li", { class: "suggestion ok", text: "Nothing to flag from the quick checks." }));
+    return;
+  }
+  host.replaceChildren(
+    ...list.map((s) =>
+      el("li", { class: `suggestion ${s.level}` }, [
+        el("span", { class: "suggestion-tag", text: s.level === "fix" ? "Fix" : "Tip" }),
+        el("strong", { text: s.where }),
+        el("span", { text: ` ${s.text}` }),
+      ])
+    )
+  );
+}
+
+async function reviewWithAI() {
+  const button = $("review-btn");
+  const status = $("review-status");
+  const host = $("ai-suggestions");
+  button.disabled = true;
+  status.textContent = "Reading your resume...";
+  host.replaceChildren();
+  try {
+    const result = await Global.fetchJSON("/api/builder/review", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ resume_yaml: $("draft-yaml").value }) });
+    status.textContent = result.suggestions.length ? `${result.suggestions.length} suggestion${result.suggestions.length === 1 ? "" : "s"} from the AI review. Edit the box above, then review again if you like.` : "The AI review found nothing worth raising.";
+    host.replaceChildren(
+      ...result.suggestions.map((s) =>
+        el("li", { class: "suggestion ai" }, [
+          el("span", { class: "suggestion-tag", text: "AI" }),
+          el("strong", { text: s.where }),
+          el("span", { text: ` ${s.issue}` }),
+          ...(s.suggestion ? [el("div", { class: "hint", text: s.suggestion })] : []),
+        ])
+      )
+    );
+  } catch (err) {
+    status.textContent = "";
+    Global.showMessage(err.message, "error");
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderDiff(changes) {
@@ -938,6 +987,7 @@ async function start() {
   $("draft-btn").addEventListener("click", draft);
   $("save-btn").addEventListener("click", save);
   $("discard-btn").addEventListener("click", discardDraft);
+  $("review-btn").addEventListener("click", reviewWithAI);
   $("keep-files").addEventListener("change", changeKeep);
   $("draft-yaml").addEventListener("input", () => {
     clearTimeout(previewTimer);

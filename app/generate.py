@@ -482,3 +482,63 @@ def extract_engagements(api_key: str, text: str) -> List[dict]:
     if not out:
         raise ResumeGenerationError("No clients or projects were found in that text.")
     return out
+
+
+MAX_REVIEW_CHARS = 60_000  # a resume's YAML; far above any real one
+
+_REVIEW_SYSTEM = """You are a careful resume editor who also reads like a hiring manager. You are shown the text of a resume as it
+will print. Reply with ONLY a JSON array (no commentary, no code fence) of up to 10 suggestions, most useful first. Each is an object:
+  where: the job (title and company) or section the suggestion is about, e.g. "Director at Rightpoint" or "Summary".
+  issue: one or two plain sentences saying what is wrong or could be better, quoting a few words of the resume when that helps.
+  suggestion: one or two plain sentences saying what to do about it.
+Look for what a rule-based checker cannot: a line that describes the COMPANY (marketing language, "we", "our brand") instead of what
+the person did; a count that does not match its list (says three, names five); claims that contradict each other or the dates; a
+summary that repeats the bullets or reads like a LinkedIn About; vague duty-only bullets with no result; buzzword padding; tense that
+does not fit (past tense for a job that has ended, present for a current one); anything awkward, unclear or easy to misread; roles or
+dates that look inconsistent.
+Rules: use ONLY facts that are in the resume. Never invent a number, result, client or date; when a number would help, say to add it
+if the person knows it. A suggestion may offer reworded text but only from what the resume already says. Do not repeat basic
+completeness checks (missing email, no bullets, bullet counts, summary length): another tool does those. Do not praise. If nothing
+is worth raising, reply with []."""
+
+
+def _printable_resume(data: dict) -> str:
+    """The resume as the reviewer should see it: only what prints. Jobs left off the resume (include_in_resume: false) and every job's
+    private `engagements` (which can name confidential clients) are never sent."""
+    keep = dict(data)
+    jobs = []
+    for job in data.get("experience") or []:
+        if isinstance(job, dict) and job.get("include_in_resume", True):
+            jobs.append({k: v for k, v in job.items() if k not in ("engagements", "include_in_resume")})
+    keep["experience"] = jobs
+    return yaml.safe_dump(keep, sort_keys=False, allow_unicode=True, width=1000)
+
+
+def review_resume(api_key: str, resume_yaml: str) -> List[dict]:
+    """Ask Claude (the person's own key) for editor's suggestions on a draft: [{where, issue, suggestion}], possibly empty. Changes
+    nothing. Raises ResumeGenerationError."""
+    if not api_key:
+        raise ResumeGenerationError("No Anthropic key to review with.")
+    if len(resume_yaml or "") > MAX_REVIEW_CHARS:
+        raise ResumeGenerationError("That resume is too long to review in one go.")
+    try:
+        data = yaml.safe_load(resume_yaml)
+    except yaml.YAMLError:
+        raise ResumeGenerationError("Fix the YAML first (the box on the left shows the problem), then review it.")
+    if not isinstance(data, dict) or not isinstance(data.get("basics"), dict):
+        raise ResumeGenerationError("Fix the YAML first: it needs a top-level 'basics' section.")
+    client = anthropic.Anthropic(api_key=api_key)
+    raw = _ask_claude(client, _REVIEW_SYSTEM, [{"role": "user", "content": _printable_resume(data)}], max_tokens=4000)
+    raw = re.sub(r"^json\s*", "", _extract_yaml(raw))
+    try:
+        items = json.loads(raw)
+        if not isinstance(items, list):
+            raise ValueError("not a list")
+    except ValueError:
+        raise ResumeGenerationError("Claude's review couldn't be read. Try again.")
+    out = []
+    for item in items:
+        if not isinstance(item, dict) or not _fit(item.get("issue"), 600):
+            continue
+        out.append({"where": _fit(item.get("where"), 120), "issue": _fit(item.get("issue"), 600), "suggestion": _fit(item.get("suggestion"), 600)})
+    return out[:10]

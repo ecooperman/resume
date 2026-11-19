@@ -29,7 +29,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from . import access, apikeys, builder, config, crud, generate, limits, render, users
+from . import access, apikeys, builder, config, crud, feedback, generate, limits, render, users
 from .deps import get_db
 
 ADMIN_STATIC_DIR = Path(__file__).parent.parent / "admin_static"
@@ -438,7 +438,34 @@ def preview_resume(body: PreviewIn):
             for j in jobs
         ],
         "changes": _changes(body.base_yaml, body.resume_yaml) if body.base_yaml else None,
+        "suggestions": feedback.check_resume(data),
     }
+
+
+class ReviewIn(BaseModel):
+    resume_yaml: str
+
+
+@app.post("/api/builder/review")
+def review_resume(
+    body: ReviewIn,
+    account: Account = Depends(accounts_gate.current_account),
+    db: Session = Depends(get_db),
+):
+    """An AI editor's suggestions on the draft being reviewed ([{where, issue, suggestion}], maybe empty). Nothing is saved or changed;
+    only what prints is sent (not private engagements, not jobs left off the resume). Their own Anthropic key pays, and it is counted
+    separately from drafting so reviewing a few edits never uses up the drafts."""
+    api_key = apikeys.require(db, account.is_admin)
+    try:
+        limits.start(("review", account.id))
+    except limits.TooBusy as e:
+        raise HTTPException(status_code=429, detail=str(e).replace("draft", "review"))
+    try:
+        return {"suggestions": generate.review_resume(api_key, body.resume_yaml)}
+    except generate.ResumeGenerationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        limits.finish(("review", account.id))
 
 
 class GenerateResumeOut(BaseModel):

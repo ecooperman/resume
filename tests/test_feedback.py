@@ -1,6 +1,7 @@
 """Feedback on a draft: instant rule-based suggestions (app/feedback.py, sent with every preview) and the AI review (its own route,
 the person's own key, only what prints is sent)."""
 import json
+import re
 from datetime import date
 
 import pytest
@@ -148,9 +149,43 @@ def test_overlapping_jobs_are_a_tip_but_a_handover_month_and_odd_date_formats_ar
     assert not [t for t in tip_texts(odd) if "overlap" in t]  # a date it cannot read is skipped, never guessed
 
 
+def overlaps(first_end, second_start, first_start="2020", second_end="Present"):
+    return [t for t in tip_texts(jobs_yaml(("Acme", first_start, first_end, "['Led 3 teams']", ""), ("Globex", second_start, second_end, "['Led 4 teams']", ""))) if "overlaps" in t]
+
+
+def test_jobs_overlap_only_when_the_first_ends_a_month_or_more_after_the_second_starts():
+    assert not overlaps("May 2026", "May 2026")  # ended and started in the same month: a handover, not two jobs at once
+    assert not overlaps("Apr 2026", "May 2026")
+    assert overlaps("Jun 2026", "May 2026")  # ended a month after the next began: held both for sure
+    assert overlaps("Dec 2026", "May 2026")
+
+
+def test_a_bare_year_never_makes_an_overlap_that_the_months_could_not_have_been():
+    assert not overlaps("2022", "2022")  # could be Mar to Sep: no way to know they overlapped
+    assert not overlaps("2022", "2023")
+    assert overlaps("2023", "2022")  # ends in 2023 in January at the earliest, starts in 2022 in December at the latest: overlap for sure
+
+
+def test_the_overlap_tip_says_it_is_probably_a_wrong_date_and_points_at_the_exit_for_side_work():
+    got = overlaps("Dec 2026", "May 2026")[0]
+    assert "wrong date" in got and "include_in_resume: false" in got
+
+
+def test_a_tip_about_the_second_job_at_one_company_points_at_the_second_one():
+    text = jobs_yaml(("Rightpoint", "Mar 2019", "Present", "['Led 3 teams']", ""), ("Rightpoint", "Jan 2016", "Jul 2019", "['Built 4 sites']", "")).replace("    end: Present", "    end:")
+    got = [s for s in check(text) if "no end date" in s["text"]]
+    assert len(got) == 1 and got[0]["nth"] == 0  # the first job is the one with no end
+    swapped = jobs_yaml(("Rightpoint", "Jan 2016", "Jul 2019", "['Built 4 sites']", ""), ("Rightpoint", "Mar 2019", "", "['Led 3 teams']", ""))
+    second = [s for s in check(swapped) if "no end date" in s["text"]]
+    assert len(second) == 1 and second[0]["nth"] == 1 and second[0]["find"][0] == "company: Rightpoint"
+    overlap = [s for s in feedback.check_resume(yaml.safe_load(jobs_yaml(("Rightpoint", "Mar 2019", "Present", "['Led 3 teams']", ""), ("Rightpoint", "Jan 2016", "Jul 2019", "['Built 4 sites']", ""))), date(2026, 11, 19)) if "overlaps" in s["text"]]
+    assert len(overlap) == 1 and overlap[0]["nth"] == 1  # the tip is about the later job in the file
+
+
 def test_a_job_that_ends_before_it_starts_is_a_fix():
     got = where(check(jobs_yaml(("Acme", "Mar 2022", "Sep 2019", "['Led 3 teams']", ""))), "fix")
     assert any("before it starts" in t for _, t in got)
+    assert not any("before it starts" in t for _, t in where(check(jobs_yaml(("Acme", "2022", "2022", "['Led 3 teams']", ""))), "fix"))  # a bare year: no way to know
 
 
 ENGAGEMENTS = "    engagements:\n      - client: Bungie\n      - client: Nikon\n        confidential: true\n"
@@ -171,10 +206,46 @@ def test_a_confidential_client_named_in_a_printed_bullet_or_the_summary_is_a_fix
     assert not [t for _, t in where(check(jobs_yaml(("Acme", "2020", "Present", "['Led 3 teams']", ENGAGEMENTS))), "fix")]
 
 
-def test_every_suggestion_says_where_to_look_for_it():
+def test_every_suggestion_lists_where_to_look_most_exact_first_and_ends_at_something_broad():
     got = check("basics:\n  name: Bob\nexperience:\n  - company: Acme\n    title: Dev\n    bullets: ['Same thing here', 'Same thing here']\n")
-    assert all(s["find"] for s in got), [s for s in got if not s["find"]]
-    assert any(s["find"] == "Acme" for s in got) and any(s["find"] == "Same thing here" for s in got)
+    dup = next(s for s in got if "appears twice" in s["text"])
+    assert dup["find"][0] == "Same thing here" and "company: Acme" in dup["find"] and dup["find"][-1] == "experience:"
+    assert next(s for s in got if "no email" in s["text"])["find"] == ["email:", "basics:"]
+
+
+MESSY = """
+basics: {name: B}
+experience:
+  - bullets: ['Lead a thing', 'Lead a thing']
+  - company: Acme
+    title: Dev
+    start: Mar 2022
+    end: Sep 2019
+    bullets: ['Lead a team', 'Own the plan']
+    engagements:
+      - client: Bungie
+      - client: Nikon
+        confidential: true
+  - company: Globex
+    start: 2019
+    end: Present
+    bullets: []
+  - company: Initech
+    title: Dev
+    start: 2020
+    end: Present
+    bullets: ['Built Nikon store']
+skills:
+  - category: Big
+    items: [""" + ", ".join(f"S{n}" for n in range(50)) + """, S1]
+"""
+
+
+def test_no_suggestion_can_dead_end_whatever_rule_raised_it():
+    got = check(MESSY)
+    assert len(got) >= 12, [s["text"][:40] for s in got]  # the messy resume trips a wide range of rules
+    for s in got:
+        assert s["find"] and re.fullmatch(r"[a-z_]+:", s["find"][-1]), s  # the last resort is always a section or key, which always exists
 
 
 # --- the AI review ---------------------------------------------------------------------------------------------------------

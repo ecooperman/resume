@@ -155,10 +155,11 @@ no prompt. Numbered steps:
    one private resume; an administrator adds a person, never published automatically). Under the summary, **Suggestions** are plain rule-based checks (`app/feedback.py`, sent with every
    `POST /api/builder/preview`, so they update as the YAML is edited; no AI, no key): missing email, phone, title or summary, a summary over
    120 words, a job with no title, company or dates (an empty end date prints open-ended), no bullets, more than 8 bullets, a bullet over
-   350 characters, repeated bullets, almost no numbers, several jobs marked Present, a job that ends before it starts, jobs whose dates overlap
-   by more than a month, a job that has ended but has present-tense bullets (Lead, Own), engagements saved for a job that no bullet mentions,
+   350 characters, repeated bullets, almost no numbers, several jobs marked Present, a job that ends before it starts, jobs whose dates overlap for
+   sure (the earlier one ends a month or more after the later one starts; ending in the month the next began is a handover, and a bare year
+   never counts against you; most people never hold two jobs at once, so it says to check the dates), a job that has ended but has present-tense bullets (Lead, Own), engagements saved for a job that no bullet mentions,
    a client marked confidential whose name is printed anywhere in the resume (a Fix), and 15+ skills in a group or 40+ in all. Clicking a
-   suggestion selects the words it is about in the YAML box (each carries a `find` string; the AI review's items carry a `quote`). **Review with AI**
+   suggestion selects the words it is about in the YAML box (each carries a `find` list, most exact first, ending at a section so it always lands somewhere, and an `nth` for two jobs at one company; the AI review's items carry a `quote`). The page matches ignoring line breaks, quotes and punctuation, so wrapped or quoted bullets are found, and a slightly reworded AI quote is found by its longest run of matching words. **Review with AI**
    (`POST /api/builder/review`, their own key, its own hourly limit apart from drafting) asks Claude, as an editor, for judgment calls the
    rules cannot make (company marketing printed as an accomplishment, a count that does not match its list, vague bullets, tense). It sees
    only what prints (never private `engagements:` or jobs with `include_in_resume: false`), returns `{where, issue, suggestion}` items,

@@ -359,7 +359,7 @@ const INDUSTRIES = [
 
 async function loadEngagements() {
   try {
-    engagements = await Global.fetchJSON("/api/engagements");
+    engagements = await Global.withLoading($("engagements"), Global.fetchJSON("/api/engagements"));
   } catch (err) {
     Global.showMessage(err.message, "error");
   }
@@ -381,7 +381,7 @@ function renderEngagements() {
       remove.addEventListener("click", async () => {
         if (!confirm(`Remove "${e.client}"? It won't be used in future drafts.`)) return;
         try {
-          await Global.fetchJSON(`/api/engagements/${e.id}`, { method: "DELETE" });
+          await Global.withLoading($("engagements"), Global.fetchJSON(`/api/engagements/${e.id}`, { method: "DELETE" }));
           await loadEngagements();
         } catch (err) {
           Global.showMessage(err.message, "error");
@@ -411,7 +411,7 @@ async function removeAllEngagements() {
   const button = $("remove-all-engagements");
   button.disabled = true;
   try {
-    const result = await Global.fetchJSON("/api/engagements?confirm=all", { method: "DELETE" });
+    const result = await Global.withLoading($("engagements"), Global.fetchJSON("/api/engagements?confirm=all", { method: "DELETE" }));
     Global.showMessage(`Removed ${result.removed} engagement${result.removed === 1 ? "" : "s"}.`, "success");
   } catch (err) {
     Global.showMessage(err.message, "error");
@@ -534,11 +534,14 @@ function openEngagementForm(existingEntry) {
     };
     save.disabled = true;
     try {
-      await Global.fetchJSON(existingEntry ? `/api/engagements/${existingEntry.id}` : "/api/engagements", {
-        method: existingEntry ? "PUT" : "POST",
-        headers: JSON_HEADERS,
-        body: JSON.stringify(body),
-      });
+      await Global.withLoading(
+        $("engagement-form"),
+        Global.fetchJSON(existingEntry ? `/api/engagements/${existingEntry.id}` : "/api/engagements", {
+          method: existingEntry ? "PUT" : "POST",
+          headers: JSON_HEADERS,
+          body: JSON.stringify(body),
+        })
+      );
       close();
       await loadEngagements();
     } catch (err) {
@@ -608,15 +611,17 @@ function openImport() {
       add.disabled = true;
       let added = 0;
       const failed = [];
-      for (let i = 0; i < proposed.length; i++) {
-        if (!picked[i]) continue;
-        try {
-          await Global.fetchJSON("/api/engagements", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(proposed[i]) });
-          added++;
-        } catch (e) {
-          failed.push(`${proposed[i].client}: ${e.message}`);
+      await Global.withLoading(box, async () => {
+        for (let i = 0; i < proposed.length; i++) {
+          if (!picked[i]) continue;
+          try {
+            await Global.fetchJSON("/api/engagements", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(proposed[i]) });
+            added++;
+          } catch (e) {
+            failed.push(`${proposed[i].client}: ${e.message}`);
+          }
         }
-      }
+      });
       await loadEngagements();
       if (failed.length) {
         err.textContent = `Added ${added}, but not: ${failed.join("; ")}`;
@@ -654,7 +659,7 @@ function openImport() {
     find.disabled = true;
     status.textContent = "Reading your list. This usually takes under a minute.";
     try {
-      const result = await Global.fetchJSON("/api/engagements/import", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ text: text.value }) });
+      const result = await Global.withLoading(box, Global.fetchJSON("/api/engagements/import", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ text: text.value }) }));
       review(result.engagements, result.room);
     } catch (err) {
       problem.textContent = err.message;
@@ -868,19 +873,20 @@ function renderSuggestions(list) {
           el("strong", { text: s.where }),
           el("span", { text: ` ${s.text}` }),
         ]),
-        [s.find]
+        s.find,
+        s.nth
       )
     )
   );
 }
 
 // A suggestion that can be clicked (or reached with the keyboard) to show the words it is about in the YAML box.
-function clickable(item, finds) {
+function clickable(item, finds, nth = 0) {
   item.classList.add("jumps");
   item.tabIndex = 0;
   item.setAttribute("role", "button");
   item.title = "Show this in the box above";
-  const go = () => jumpToText(finds);
+  const go = () => jumpToText(finds, nth);
   item.addEventListener("click", go);
   item.addEventListener("keydown", (e) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -891,31 +897,88 @@ function clickable(item, finds) {
   return item;
 }
 
-// The words an AI suggestion is about: its exact quote, then the start of it, then the company in "Title at Company", then the section name.
+// What an AI suggestion is about, most exact first: its quote, then the job (the company in "Title at Company"), then the section.
 function aiFinds(s) {
   const where = (s.where || "").trim();
+  const split = where.lastIndexOf(" at ");
+  const title = split > 0 ? where.slice(0, split).trim() : "";
+  const company = split > 0 ? where.slice(split + 4).trim() : "";
   const sections = ["summary", "skills", "education", "certifications", "projects", "experience"];
-  return [s.quote, (s.quote || "").slice(0, 30), where.includes(" at ") ? where.split(" at ").pop() : "", sections.includes(where.toLowerCase()) ? `${where.toLowerCase()}:` : where];
+  const section = sections.includes(where.toLowerCase()) ? `${where.toLowerCase()}:` : "";
+  // The title line comes before the company line: one company can have several jobs, but each has its own title.
+  return [s.quote, title && `title: ${title}`, company && `company: ${company}`, company, section, company ? "experience:" : "", "basics:"].filter(Boolean);
 }
 
-// Select the first of `finds` that appears in the draft box (ignoring case) and scroll the box to it.
-function jumpToText(finds) {
-  const box = $("draft-yaml");
-  const haystack = box.value.toLowerCase();
-  for (const find of finds) {
-    const needle = (find || "").trim().toLowerCase();
-    const at = needle ? haystack.indexOf(needle) : -1;
-    if (at < 0) continue;
-    box.scrollIntoView({ behavior: "smooth", block: "center" });
-    box.focus({ preventScroll: true });
-    box.setSelectionRange(at, at + needle.length);
-    const line = box.value.slice(0, at).split("\n").length - 1;
-    const style = getComputedStyle(box);
-    const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.3;
-    box.scrollTop = Math.max(0, line * lineHeight - box.clientHeight / 3);
-    return;
+// The letters and digits of a text, lowercased, with where each one sat in the original. Searching these instead of the raw text means
+// line breaks, indentation, quotes, escapes and punctuation in the YAML never stop a match (a long bullet is often wrapped over lines).
+function squash(text) {
+  const chars = [];
+  const at = [];
+  for (let i = 0; i < text.length; i++) {
+    for (const ch of text[i].toLowerCase()) {
+      if (/[\p{L}\p{N}]/u.test(ch)) {
+        chars.push(ch);
+        at.push(i);
+      }
+    }
   }
-  Global.showMessage("Couldn't find that in the box. It may have been edited since.", "error");
+  return { s: chars.join(""), at };
+}
+
+// [start, end) in the box text of `needle`, or null. A bare key ("summary:") is that key at the start of a line; anything else is
+// words, matched ignoring spacing and punctuation. A phrase (4+ words, such as a bullet or an AI quote that may be slightly reworded)
+// that is not found whole is looked for in shrinking runs of its words. `nth` picks the nth match (two jobs at one company).
+function findRange(text, hay, needle, nth) {
+  if (/^[a-z_]+:$/i.test(needle)) {
+    const re = new RegExp(`^[ \\t-]*(${needle.slice(0, -1)}):`, "gmi");
+    const found = [...text.matchAll(re)];
+    if (!found.length) return null;
+    const m = found[Math.min(nth, found.length - 1)];
+    const start = m.index + m[0].indexOf(m[1]);
+    return [start, start + needle.length];
+  }
+  const locate = (sq) => {
+    if (sq.length < 3) return null;
+    const starts = [];
+    for (let i = hay.s.indexOf(sq); i >= 0; i = hay.s.indexOf(sq, i + 1)) starts.push(i);
+    if (!starts.length) return null;
+    const i = starts[Math.min(nth, starts.length - 1)];
+    return [hay.at[i], hay.at[i + sq.length - 1] + 1];
+  };
+  const whole = locate(squash(needle).s);
+  if (whole) return whole;
+  const words = needle.split(/\s+/).map((w) => squash(w).s).filter(Boolean);
+  if (words.length < 4) return null;
+  for (let size = words.length - 1; size >= 3; size--) {
+    for (let from = 0; from + size <= words.length; from++) {
+      const chunk = words.slice(from, from + size).join("");
+      const found = chunk.length >= 12 ? locate(chunk) : null;
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// Select the first of `finds` that is in the draft box and scroll the box to it. If none is (the text was edited away), it still lands
+// on the top of the box rather than doing nothing.
+function jumpToText(finds, nth = 0) {
+  const box = $("draft-yaml");
+  const hay = squash(box.value);
+  let range = null;
+  for (const find of finds || []) {
+    range = findRange(box.value, hay, (find || "").trim(), nth);
+    if (range) break;
+  }
+  const exact = Boolean(range);
+  if (!range) range = [0, (box.value.indexOf("\n") + 1 || box.value.length + 1) - 1];
+  box.scrollIntoView({ behavior: "smooth", block: "center" });
+  box.focus({ preventScroll: true });
+  box.setSelectionRange(range[0], range[1]);
+  const line = box.value.slice(0, range[0]).split("\n").length - 1;
+  const style = getComputedStyle(box);
+  const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.3;
+  box.scrollTop = Math.max(0, line * lineHeight - box.clientHeight / 3);
+  if (!exact) Global.showMessage("That part of the draft has been edited, so this is the top of the box.", "error");
 }
 
 // The AI review is remembered in this browser (a convenience, not part of the draft), with the text it was about, so after a reload it

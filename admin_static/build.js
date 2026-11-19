@@ -357,10 +357,10 @@ const INDUSTRIES = [
   "Real estate", "Software and technology", "Non-profit", "Consulting",
 ];
 
-// Back to the top of the engagements list (or, with none yet, the proposals under it). Reading a pasted list swaps a tall box for a
+// Back to the top of the engagements list (or, with none, the proposals under it, or failing that the step itself). Reading a pasted list swaps a tall box for a
 // different one, which leaves the page wherever the browser lands, often down at a later step; this puts the person where the result is.
 function scrollToEngagements() {
-  const target = $("engagements").children.length ? $("engagements") : $("import-box");
+  const target = $("engagements").children.length ? $("engagements") : $("import-box").children.length ? $("import-box") : $("step-work");
   requestAnimationFrame(() => target.scrollIntoView({ behavior: "smooth", block: "start" }));
 }
 
@@ -425,6 +425,7 @@ async function removeAllEngagements() {
   } finally {
     button.disabled = false;
     await loadEngagements();
+    scrollToEngagements();
   }
 }
 

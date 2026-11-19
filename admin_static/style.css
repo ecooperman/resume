@@ -400,3 +400,16 @@ textarea.yaml {
   background: var(--muted-bg);
   outline: none;
 }
+
+/* Step 4's two add buttons. The shared .add-toggle is width: 100% with a bottom margin, which in a row squeezed the second button until
+   its label wrapped onto two lines. Let the toggle take the room that is left, and never squeeze or wrap the other one. */
+#add-buttons .add-toggle {
+  flex: 1 1 auto;
+  width: auto;
+  margin-bottom: 0;
+}
+
+#add-buttons .secondary-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}

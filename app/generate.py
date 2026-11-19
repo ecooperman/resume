@@ -489,6 +489,8 @@ MAX_REVIEW_CHARS = 60_000  # a resume's YAML; far above any real one
 _REVIEW_SYSTEM = """You are a careful resume editor who also reads like a hiring manager. You are shown the text of a resume as it
 will print. Reply with ONLY a JSON array (no commentary, no code fence) of up to 10 suggestions, most useful first. Each is an object:
   where: the job (title and company) or section the suggestion is about, e.g. "Director at Rightpoint" or "Summary".
+  quote: a few exact words (4 to 10) copied from the resume at the place this is about, so the page can find it. "" if it is about the
+    whole resume.
   issue: one or two plain sentences saying what is wrong or could be better, quoting a few words of the resume when that helps.
   suggestion: one or two plain sentences saying what to do about it.
 Look for what a rule-based checker cannot: a line that describes the COMPANY (marketing language, "we", "our brand") instead of what
@@ -540,5 +542,5 @@ def review_resume(api_key: str, resume_yaml: str) -> List[dict]:
     for item in items:
         if not isinstance(item, dict) or not _fit(item.get("issue"), 600):
             continue
-        out.append({"where": _fit(item.get("where"), 120), "issue": _fit(item.get("issue"), 600), "suggestion": _fit(item.get("suggestion"), 600)})
+        out.append({"where": _fit(item.get("where"), 120), "quote": _fit(item.get("quote"), 200), "issue": _fit(item.get("issue"), 600), "suggestion": _fit(item.get("suggestion"), 600)})
     return out[:10]

@@ -1,6 +1,7 @@
 """Feedback on a draft: instant rule-based suggestions (app/feedback.py, sent with every preview) and the AI review (its own route,
 the person's own key, only what prints is sent)."""
 import json
+from datetime import date
 
 import pytest
 import yaml
@@ -113,6 +114,69 @@ def test_the_preview_carries_the_suggestions(person, people):
     assert "suggestions" not in bob.post("/api/builder/preview", json={"resume_yaml": "a: [oops"}).json()
 
 
+def tip_texts(text, today=date(2026, 11, 19)):
+    return [t for _, t in where(feedback.check_resume(yaml.safe_load(text), today), "tip")]
+
+
+def jobs_yaml(*jobs):
+    """A complete resume around the given jobs, each (company, start, end, bullets-list-text, extra)."""
+    body = "".join(
+        f"  - company: {c}\n    title: Dev\n    start: {s}\n    end: {e}\n    bullets: {b}\n{extra}" for c, s, e, b, extra in jobs
+    )
+    return "basics: {name: B, title: T, email: e@x.com, phone: '1', summary: s}\nexperience:\n" + body
+
+
+def test_a_past_job_written_in_present_tense_is_a_tip_but_a_current_job_is_not():
+    past = jobs_yaml(("Acme", "Mar 2019", "Sep 2022", "['Lead a team of 5', 'Owns the roadmap for 3 products', 'Built a thing for 2 clients']", ""))
+    got = [t for t in tip_texts(past) if "present tense" in t]
+    assert got and "2 of its bullets are in present tense" in got[0] and "Lead a team" in got[0]
+    one = jobs_yaml(("Acme", "Mar 2019", "Sep 2022", "['Lead a team of 5', 'Built a thing for 2 clients']", ""))
+    assert any("1 of its bullets is in present tense" in t for t in tip_texts(one))
+    now = jobs_yaml(("Acme", "Mar 2019", "Present", "['Lead a team of 5', 'Own the roadmap for 3 products']", ""))
+    assert not [t for t in tip_texts(now) if "present tense" in t]
+    fine = jobs_yaml(("Acme", "Mar 2019", "Sep 2022", "['Led a team of 5', 'Owned the roadmap for 3 products', 'Ran 12 releases', 'Set the 2021 plan']", ""))
+    assert not [t for t in tip_texts(fine) if "present tense" in t]  # past tense, and verbs spelled the same in both are never flagged
+
+
+def test_overlapping_jobs_are_a_tip_but_a_handover_month_and_odd_date_formats_are_fine():
+    overlap = jobs_yaml(("Acme", "Mar 2019", "Sep 2022", "['Led 3 teams']", ""), ("Globex", "June 2021", "2024", "['Led 4 teams']", ""))
+    got = [t for t in tip_texts(overlap) if "overlaps" in t]
+    assert len(got) == 1 and "Acme" in got[0] and "Globex" in got[0]
+    handover = jobs_yaml(("Acme", "Mar 2019", "Sep 2022", "['Led 3 teams']", ""), ("Globex", "Sep 2022", "Present", "['Led 4 teams']", ""))
+    assert not [t for t in tip_texts(handover) if "overlap" in t]
+    odd = jobs_yaml(("Acme", "someday", "Sep 2022", "['Led 3 teams']", ""), ("Globex", "2021", "2024", "['Led 4 teams']", ""))
+    assert not [t for t in tip_texts(odd) if "overlap" in t]  # a date it cannot read is skipped, never guessed
+
+
+def test_a_job_that_ends_before_it_starts_is_a_fix():
+    got = where(check(jobs_yaml(("Acme", "Mar 2022", "Sep 2019", "['Led 3 teams']", ""))), "fix")
+    assert any("before it starts" in t for _, t in got)
+
+
+ENGAGEMENTS = "    engagements:\n      - client: Bungie\n      - client: Nikon\n        confidential: true\n"
+
+
+def test_saved_engagements_that_no_bullet_mentions_are_a_tip_naming_them():
+    got = [t for t in tip_texts(jobs_yaml(("Acme", "2020", "Present", "['Led 3 teams']", ENGAGEMENTS))) if "engagements" in t]
+    assert len(got) == 1 and got[0].startswith("Bungie is saved") and "Nikon" not in got[0]  # a confidential client is never suggested for a bullet
+    printed = jobs_yaml(("Acme", "2020", "Present", "['Led 3 teams, including the Bungie site']", ENGAGEMENTS))
+    assert not [t for t in tip_texts(printed) if "engagements" in t]
+
+
+def test_a_confidential_client_named_in_a_printed_bullet_or_the_summary_is_a_fix():
+    leaked = jobs_yaml(("Acme", "2020", "Present", "['Built the Nikon store for 3 regions']", ENGAGEMENTS))
+    assert any("Nikon is marked confidential" in t for _, t in where(check(leaked), "fix"))
+    in_summary = leaked.replace("summary: s", "summary: Worked with Nikon").replace("Built the Nikon store", "Built a store")
+    assert any("Nikon is marked confidential" in t for _, t in where(check(in_summary), "fix"))
+    assert not [t for _, t in where(check(jobs_yaml(("Acme", "2020", "Present", "['Led 3 teams']", ENGAGEMENTS))), "fix")]
+
+
+def test_every_suggestion_says_where_to_look_for_it():
+    got = check("basics:\n  name: Bob\nexperience:\n  - company: Acme\n    title: Dev\n    bullets: ['Same thing here', 'Same thing here']\n")
+    assert all(s["find"] for s in got), [s for s in got if not s["find"]]
+    assert any(s["find"] == "Acme" for s in got) and any(s["find"] == "Same thing here" for s in got)
+
+
 # --- the AI review ---------------------------------------------------------------------------------------------------------
 
 WITH_PRIVATE = """
@@ -133,7 +197,7 @@ experience:
 """
 
 REVIEW = json.dumps([
-    {"where": "Dev at Acme", "issue": "A bullet describes the company.", "suggestion": "Say what you did."},
+    {"where": "Dev at Acme", "quote": "Built things", "issue": "A bullet describes the company.", "suggestion": "Say what you did."},
     {"where": "Summary", "issue": "Says three but names five.", "suggestion": ""},
     {"nonsense": True}, 5,
 ])
@@ -151,8 +215,8 @@ def test_the_ai_review_returns_cleaned_suggestions_and_sends_only_what_prints(pe
     resp = bob.post("/api/builder/review", json={"resume_yaml": WITH_PRIVATE})
     assert resp.status_code == 200, resp.text
     assert resp.json()["suggestions"] == [
-        {"where": "Dev at Acme", "issue": "A bullet describes the company.", "suggestion": "Say what you did."},
-        {"where": "Summary", "issue": "Says three but names five.", "suggestion": ""},
+        {"where": "Dev at Acme", "quote": "Built things", "issue": "A bullet describes the company.", "suggestion": "Say what you did."},
+        {"where": "Summary", "quote": "", "issue": "Says three but names five.", "suggestion": ""},
     ]
     sent = fake.calls[0]["messages"][0]["content"]
     assert fake.keys[-1] == KEY_A and "Built things" in sent

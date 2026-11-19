@@ -757,7 +757,8 @@ let previewRound = 0;
 let previewTimer = null;
 let lastPreview = { ok: false };
 
-function showReview(yamlText, { scroll = true } = {}) {
+function showReview(yamlText, { scroll = true, keepReview = false } = {}) {
+  if (!keepReview) rememberReview(null); // a fresh draft has not been reviewed
   $("step-review").classList.remove("hidden");
   $("draft-yaml").value = yamlText;
   renderSaveFields();
@@ -781,6 +782,7 @@ function saveDraftSoon() {
 
 async function clearDraft() {
   clearTimeout(draftTimer);
+  rememberReview(null);
   try {
     await Global.fetchJSON("/api/builder/draft", { method: "DELETE" });
   } catch (err) {
@@ -798,6 +800,7 @@ async function discardDraft() {
 }
 
 async function restoreDraft() {
+  recallReview();
   let saved = null;
   try {
     saved = (await Global.fetchJSON("/api/builder/draft")).draft;
@@ -808,7 +811,7 @@ async function restoreDraft() {
   target = saved.person_id ? myPeople.find((p) => p.id === saved.person_id) || null : null;
   await loadTarget();
   renderMode();
-  showReview(saved.resume_yaml, { scroll: false });
+  showReview(saved.resume_yaml, { scroll: false, keepReview: true });
   const note = $("draft-note");
   note.textContent = `This is the draft you were working on (last changed ${new Date(saved.updated_at).toLocaleString()}). It is not saved as your resume yet.`;
   note.classList.remove("hidden");
@@ -834,6 +837,7 @@ async function refreshPreview() {
   $("save-btn").disabled = false;
   renderDiff(result.changes);
   renderSuggestions(result.suggestions || []);
+  renderAiReview();
   const nameField = document.getElementById("save-name");
   if (nameField && !nameField.dataset.touched) nameField.value = result.name || "";
   host.replaceChildren(
@@ -858,40 +862,127 @@ function renderSuggestions(list) {
   }
   host.replaceChildren(
     ...list.map((s) =>
-      el("li", { class: `suggestion ${s.level}` }, [
-        el("span", { class: "suggestion-tag", text: s.level === "fix" ? "Fix" : "Tip" }),
-        el("strong", { text: s.where }),
-        el("span", { text: ` ${s.text}` }),
-      ])
+      clickable(
+        el("li", { class: `suggestion ${s.level}` }, [
+          el("span", { class: "suggestion-tag", text: s.level === "fix" ? "Fix" : "Tip" }),
+          el("strong", { text: s.where }),
+          el("span", { text: ` ${s.text}` }),
+        ]),
+        [s.find]
+      )
+    )
+  );
+}
+
+// A suggestion that can be clicked (or reached with the keyboard) to show the words it is about in the YAML box.
+function clickable(item, finds) {
+  item.classList.add("jumps");
+  item.tabIndex = 0;
+  item.setAttribute("role", "button");
+  item.title = "Show this in the box above";
+  const go = () => jumpToText(finds);
+  item.addEventListener("click", go);
+  item.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      go();
+    }
+  });
+  return item;
+}
+
+// The words an AI suggestion is about: its exact quote, then the start of it, then the company in "Title at Company", then the section name.
+function aiFinds(s) {
+  const where = (s.where || "").trim();
+  const sections = ["summary", "skills", "education", "certifications", "projects", "experience"];
+  return [s.quote, (s.quote || "").slice(0, 30), where.includes(" at ") ? where.split(" at ").pop() : "", sections.includes(where.toLowerCase()) ? `${where.toLowerCase()}:` : where];
+}
+
+// Select the first of `finds` that appears in the draft box (ignoring case) and scroll the box to it.
+function jumpToText(finds) {
+  const box = $("draft-yaml");
+  const haystack = box.value.toLowerCase();
+  for (const find of finds) {
+    const needle = (find || "").trim().toLowerCase();
+    const at = needle ? haystack.indexOf(needle) : -1;
+    if (at < 0) continue;
+    box.scrollIntoView({ behavior: "smooth", block: "center" });
+    box.focus({ preventScroll: true });
+    box.setSelectionRange(at, at + needle.length);
+    const line = box.value.slice(0, at).split("\n").length - 1;
+    const style = getComputedStyle(box);
+    const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.3;
+    box.scrollTop = Math.max(0, line * lineHeight - box.clientHeight / 3);
+    return;
+  }
+  Global.showMessage("Couldn't find that in the box. It may have been edited since.", "error");
+}
+
+// The AI review is remembered in this browser (a convenience, not part of the draft), with the text it was about, so after a reload it
+// is still there and can say whether the draft has been edited since.
+const REVIEW_KEY = "resume-ai-review";
+let aiReview = null; // {suggestions, at, yaml} or null
+
+function rememberReview(review) {
+  aiReview = review;
+  try {
+    if (review) localStorage.setItem(REVIEW_KEY, JSON.stringify(review));
+    else localStorage.removeItem(REVIEW_KEY);
+  } catch (err) {
+    /* private window or blocked storage: the review simply is not kept across a reload */
+  }
+}
+
+function recallReview() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(REVIEW_KEY) || "null");
+    if (saved && Array.isArray(saved.suggestions) && typeof saved.yaml === "string") aiReview = saved;
+  } catch (err) {
+    aiReview = null;
+  }
+}
+
+function renderAiReview() {
+  const host = $("ai-suggestions");
+  const status = $("review-status");
+  if (!aiReview) {
+    host.replaceChildren();
+    status.textContent = "";
+    return;
+  }
+  const n = aiReview.suggestions.length;
+  const edited = aiReview.yaml !== $("draft-yaml").value;
+  const when = new Date(aiReview.at).toLocaleString();
+  status.textContent = `${n ? `${n} suggestion${n === 1 ? "" : "s"} from the AI review` : "The AI review found nothing worth raising"} (${when}).${edited ? " You have edited the draft since, so some may be out of date: review again to refresh." : ""}`;
+  host.replaceChildren(
+    ...aiReview.suggestions.map((s) =>
+      clickable(
+        el("li", { class: "suggestion ai" }, [
+          el("span", { class: "suggestion-tag", text: "AI" }),
+          el("strong", { text: s.where }),
+          el("span", { text: ` ${s.issue}` }),
+          ...(s.suggestion ? [el("div", { class: "hint", text: s.suggestion })] : []),
+        ]),
+        aiFinds(s)
+      )
     )
   );
 }
 
 async function reviewWithAI() {
   const button = $("review-btn");
-  const status = $("review-status");
-  const host = $("ai-suggestions");
   button.disabled = true;
-  status.textContent = "Reading your resume...";
-  host.replaceChildren();
+  $("review-status").textContent = "Reading your resume...";
+  $("ai-suggestions").replaceChildren();
+  const text = $("draft-yaml").value;
   try {
-    const result = await Global.fetchJSON("/api/builder/review", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ resume_yaml: $("draft-yaml").value }) });
-    status.textContent = result.suggestions.length ? `${result.suggestions.length} suggestion${result.suggestions.length === 1 ? "" : "s"} from the AI review. Edit the box above, then review again if you like.` : "The AI review found nothing worth raising.";
-    host.replaceChildren(
-      ...result.suggestions.map((s) =>
-        el("li", { class: "suggestion ai" }, [
-          el("span", { class: "suggestion-tag", text: "AI" }),
-          el("strong", { text: s.where }),
-          el("span", { text: ` ${s.issue}` }),
-          ...(s.suggestion ? [el("div", { class: "hint", text: s.suggestion })] : []),
-        ])
-      )
-    );
+    const result = await Global.fetchJSON("/api/builder/review", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ resume_yaml: text }) });
+    rememberReview({ suggestions: result.suggestions, at: new Date().toISOString(), yaml: text });
   } catch (err) {
-    status.textContent = "";
     Global.showMessage(err.message, "error");
   } finally {
     button.disabled = false;
+    renderAiReview();
   }
 }
 

@@ -390,3 +390,13 @@ textarea.yaml {
 .suggestion .hint {
   margin: 2px 0 0;
 }
+
+.suggestion.jumps {
+  cursor: pointer;
+}
+
+.suggestion.jumps:hover,
+.suggestion.jumps:focus-visible {
+  background: var(--muted-bg);
+  outline: none;
+}

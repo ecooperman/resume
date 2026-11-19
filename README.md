@@ -155,11 +155,14 @@ no prompt. Numbered steps:
    one private resume; an administrator adds a person, never published automatically). Under the summary, **Suggestions** are plain rule-based checks (`app/feedback.py`, sent with every
    `POST /api/builder/preview`, so they update as the YAML is edited; no AI, no key): missing email, phone, title or summary, a summary over
    120 words, a job with no title, company or dates (an empty end date prints open-ended), no bullets, more than 8 bullets, a bullet over
-   350 characters, repeated bullets, almost no numbers, several jobs marked Present, and 15+ skills in a group or 40+ in all. **Review with AI**
+   350 characters, repeated bullets, almost no numbers, several jobs marked Present, a job that ends before it starts, jobs whose dates overlap
+   by more than a month, a job that has ended but has present-tense bullets (Lead, Own), engagements saved for a job that no bullet mentions,
+   a client marked confidential whose name is printed anywhere in the resume (a Fix), and 15+ skills in a group or 40+ in all. Clicking a
+   suggestion selects the words it is about in the YAML box (each carries a `find` string; the AI review's items carry a `quote`). **Review with AI**
    (`POST /api/builder/review`, their own key, its own hourly limit apart from drafting) asks Claude, as an editor, for judgment calls the
    rules cannot make (company marketing printed as an accomplishment, a count that does not match its list, vague bullets, tense). It sees
    only what prints (never private `engagements:` or jobs with `include_in_resume: false`), returns `{where, issue, suggestion}` items,
-   and changes nothing.
+   and changes nothing. The last review is kept in this browser's localStorage (not on the server), with the text it was about, so a reload still shows it and says when the draft has been edited since.
 
 What is kept, per person and private to them (tables `source_files`, `engagements`, `builder_notes`, `builder_drafts`): the *text* of each uploaded
 file (never the original; for LinkedIn only the career CSVs), the engagements, the notes, and the unsaved draft, so a reload loses nothing and adding one

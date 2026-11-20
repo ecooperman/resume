@@ -67,6 +67,11 @@ lets people in on the Users page or the dashboard's People page), every resume a
 - **Deleting jobs in bulk** (`POST /api/jobs/delete {job_ids}`): the Jobs page's "Delete the N jobs showing" (or "Delete all N jobs" with no filter on) removes exactly the jobs the filters leave on screen, after two
   confirmations, like removing all engagements. Someone with several resumes also gets a resume filter (and each job shows which resume it belongs to), so one resume's jobs can be cleared without touching the rest.
   Ids that are not the signed-in person's own are ignored, so it can only ever remove their own jobs.
+- **Start here** (`/welcome.html`, `admin_templates/welcome.html`, `admin_static/welcome.js`): the intro screen for everyone with an account, first in the menu. It explains the whole process in order (Anthropic key,
+  build a resume, the optional Chrome extension, collecting jobs, scoring, tailoring, tracking), what it costs and who can see what. The words are static HTML; a "Where you are" box and a done / to do mark on each step
+  are filled from what the person actually has (`/api/api-key`, `/api/people`, `/api/tokens`, `/api/jobs`), and it names the one next thing to do. A non-administrator opening the front page for the very first time is
+  sent there once (the page sets `resume-welcome-seen` in the browser's localStorage). The copy deliberately never names the app ("this app", page names), so renaming resume to jobs does not date it.
+  `tests/test_welcome.py` also checks every link on it resolves.
 - **Pushing jobs from the Chrome extension** (`app/push.py`, `app/tokens.py`, table `push_tokens`): a signed-in person makes a personal token on the Jobs page ("Connect the Chrome
   extension"; shown once, only its SHA-256 kept, up to 10, removing one revokes it). The extension sends `Authorization: Bearer <token>` to `POST /api/push/jobs`
   (`{jobs: [{url, title, company, salary, jd_text, optionally tier/summary/matched/gaps/strengths}], person_id?, score?}`, up to 200 postings and 12 MB) and `GET /api/push/ping`

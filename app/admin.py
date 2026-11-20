@@ -82,6 +82,7 @@ def _page(name: str, admin_only: bool = False):
 
 
 app.get("/", response_class=HTMLResponse)(_page("people.html"))
+app.get("/welcome.html", response_class=HTMLResponse)(_page("welcome.html"))
 app.get("/build.html", response_class=HTMLResponse)(_page("build.html"))
 app.get("/codes.html", response_class=HTMLResponse)(_page("codes.html", admin_only=True))
 app.get("/users.html", response_class=HTMLResponse)(_page("users.html", admin_only=True))

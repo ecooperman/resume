@@ -178,6 +178,19 @@ async function start() {
   } catch (err) {
     Global.showMessage(err.message, "error");
   }
+  // Someone using the app for the very first time lands on the explanation of the whole process, once (the Start here page remembers they have seen it).
+  if (!me.is_admin) {
+    let seen = true;
+    try {
+      seen = localStorage.getItem("resume-welcome-seen") === "1";
+    } catch (err) {
+      /* no storage: do not send them anywhere, they can still reach it from the menu */
+    }
+    if (!seen) {
+      location.replace("/welcome.html");
+      return;
+    }
+  }
   // What only an administrator may use stays out of everyone else's page.
   for (const id of ["slug-field", "default-field", "published-field"]) {
     document.getElementById(id).classList.toggle("admin-only-hidden", !me.is_admin);

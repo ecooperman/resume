@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en" data-ui="v2" data-theme-default="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Start here · Resume</title>
+  <link rel="stylesheet" href="{{ shared_assets_base }}/theme.css">
+  <script src="{{ shared_assets_base }}/theme-init.js"></script>
+  <link rel="stylesheet" href="/style.css?v={{ asset_v('style.css') }}">
+</head>
+<body>
+  <header class="app-header">
+    <h1>Start here</h1>
+    <p class="subtitle">What this app does and everything you do in it, in order, from your first sign-in to a resume and cover letter written for a particular job. You can come back to this page any time from the menu.</p>
+  </header>
+
+  <div id="app-nav-mount"></div>
+
+  <main>
+    <div id="page-message" class="page-message hidden"></div>
+
+    <section class="step next-step" id="where-you-are">
+      <h2>Where you are</h2>
+      <p id="where-summary" class="hint">Checking what you have set up...</p>
+      <div id="where-next" class="item-actions"></div>
+    </section>
+
+    <section class="step">
+      <h2><span class="step-num" aria-hidden="true">i</span>The big picture</h2>
+      <p>This app helps you run a job search. You collect the jobs you are considering, it tells you how well each one fits <em>your</em> resume, and for the ones you like it writes a copy of your resume and a cover letter aimed at that job. It keeps track of where you are with each one.</p>
+      <ol class="flow-strip" aria-label="The process in five parts">
+        <li><strong>Your resume</strong><span>made once, from what you already have</span></li>
+        <li><strong>Jobs come in</strong><span>pasted, or sent from Chrome</span></li>
+        <li><strong>Each is scored</strong><span>how well it fits you, and why</span></li>
+        <li><strong>You tailor</strong><span>a resume and letter for the ones you want</span></li>
+        <li><strong>You track</strong><span>applied, notes, filters</span></li>
+      </ol>
+      <p class="hint">You decide everything. The AI reads and writes; it never applies to anything, and nothing leaves this app without you pressing a button.</p>
+    </section>
+
+    <section class="step" id="s-key">
+      <h2><span class="step-num" aria-hidden="true">1</span>Add your Anthropic key <span class="step-status" data-status="key"></span></h2>
+      <p>The AI here is Anthropic's (the company behind Claude), and it is billed to <strong>your own Anthropic account</strong>, so you need a key from it. This takes about five minutes, once. A Claude chat subscription is a different thing and does not include this.</p>
+      <ul class="plain-list">
+        <li><strong>What you do:</strong> sign up at the Anthropic Console, add a few dollars of credit, create a key and paste it here. The exact clicks are at the top of <a href="/build.html">Build my resume</a> (step 1 on that page).</li>
+        <li><strong>If the person who invited you said they would cover the cost</strong> (an administrator can switch that on for you), you can skip this step; the page above will say so.</li>
+        <li>The key is saved encrypted, only you can use it, and it is never shown again.</li>
+      </ul>
+      <p><a class="secondary-btn" data-btn-icon="arrow-right" href="/build.html">Go to the key step</a></p>
+    </section>
+
+    <section class="step" id="s-resume">
+      <h2><span class="step-num" aria-hidden="true">2</span>Build your resume <span class="step-status" data-status="resume"></span></h2>
+      <p>Everything else is measured against your resume, so it comes first. You do not type it in: you bring what you already have and the AI writes a first draft for you to check.</p>
+      <ul class="plain-list">
+        <li><strong>Bring:</strong> your LinkedIn data (LinkedIn emails you a download; it can take from ten minutes to a day, so ask for it first), any old resumes (PDF, Word or text), and notes about the work behind them (clients, projects, results).</li>
+        <li><strong>The AI</strong> reads them and drafts a resume. It only uses what you gave it; nothing is invented.</li>
+        <li><strong>You check it</strong> side by side with how it will read, fix anything wrong, and press Save. Nothing is your resume until you save it.</li>
+        <li>Allow about 20 to 40 minutes the first time, plus LinkedIn's wait. Later, updating it takes a minute.</li>
+      </ul>
+      <p><a class="secondary-btn" data-btn-icon="arrow-right" href="/build.html">Build my resume</a></p>
+    </section>
+
+    <section class="step" id="s-extension">
+      <h2><span class="step-num" aria-hidden="true">3</span>Optional, but the fastest way to collect jobs: the Chrome extension <span class="step-status" data-status="extension"></span></h2>
+      <p>A small add-on for Chrome on a computer. While you browse job postings, one button sends the one you are looking at into your Jobs list here, so there is nothing to copy and paste. You set it up once per computer, which takes about ten minutes, and the page walks you through every click.</p>
+      <ul class="plain-list">
+        <li>You do not need it: on the Jobs page you can also add a job by pasting its text.</li>
+        <li>It does nothing until you press its button, and it only reads the page you are on.</li>
+      </ul>
+      <p><a class="secondary-btn" data-btn-icon="arrow-right" href="/extension.html">Get the extension</a></p>
+    </section>
+
+    <section class="step" id="s-jobs">
+      <h2><span class="step-num" aria-hidden="true">4</span>Collect jobs <span class="step-status" data-status="jobs"></span></h2>
+      <p>All your jobs live on the <a href="/jobs.html">Jobs page</a>, private to you. They get in one of three ways:</p>
+      <ul class="plain-list">
+        <li><strong>From Chrome</strong>, with the extension: open a posting, press <em>Send this job to Jobs</em>.</li>
+        <li><strong>Pasted:</strong> on the Jobs page press <em>Add a job</em> and paste the job's text and, if you have it, its link.</li>
+        <li><strong>Imported:</strong> if you used the older version of the extension, it made a CSV file; <em>Import from the Chrome extension</em> on the Jobs page reads it.</li>
+      </ul>
+      <p class="hint">Adding the same job twice is harmless: jobs are matched by their link, and your notes and "applied" mark are never overwritten.</p>
+      <p><a class="secondary-btn" data-btn-icon="arrow-right" href="/jobs.html">Open the Jobs page</a></p>
+    </section>
+
+    <section class="step" id="s-scored">
+      <h2><span class="step-num" aria-hidden="true">5</span>Each job is scored for you <span class="step-status" data-status="scored"></span></h2>
+      <p>As soon as a job has its text, the AI compares it with your resume in the background (about 15 seconds each; you can carry on meanwhile). Open a job on the Jobs page to see:</p>
+      <ul class="plain-list">
+        <li><strong>A fit rating:</strong> <em>Strong</em>, <em>Good</em>, <em>Possible</em>, <em>Weak</em>, or <em>Unclear</em> when the posting is too vague to judge. The page sorts best fit first and lets you hide the weak ones.</li>
+        <li><strong>Why:</strong> what in your resume matches what the job asks for, what is missing (and whether the posting calls it a must-have), and your strengths it did not ask about.</li>
+        <li><strong>The pay,</strong> when the posting states it.</li>
+      </ul>
+      <p class="hint">The rating is a quick guide to help you choose where to spend your time, not a verdict. It only uses what is actually in your resume and the posting.</p>
+    </section>
+
+    <section class="step" id="s-tailor">
+      <h2><span class="step-num" aria-hidden="true">6</span>Make a resume and cover letter for the jobs you want <span class="step-status" data-status="tailor"></span></h2>
+      <p>On an open job, press <em>Make a resume and cover letter for this job</em>. After a minute or two you get:</p>
+      <ul class="plain-list">
+        <li>a copy of your resume <strong>reworded and reordered for this posting</strong>, with your contact details untouched and nothing invented, and</li>
+        <li>a short cover letter that connects your real background to this job.</li>
+      </ul>
+      <p>Download each as a PDF or a Word file. <strong>Read them before you send them:</strong> they are written by an AI, so check every claim is true and sounds like you. Your original resume is never changed.</p>
+    </section>
+
+    <section class="step" id="s-track">
+      <h2><span class="step-num" aria-hidden="true">7</span>Keep track</h2>
+      <ul class="plain-list">
+        <li>Tick <em>I've applied to this one</em> and write notes (who you spoke to, what is next) on each job.</li>
+        <li>Use the filters at the top of the Jobs page to show only the best fits, or hide the ones you have applied to. A line there tells you how many are showing.</li>
+        <li>Delete jobs you are finished with, one at a time or all the ones showing.</li>
+        <li>When your resume changes, update it in Build my resume; new scores and new tailored copies use the new version.</li>
+      </ul>
+    </section>
+
+    <section class="step">
+      <h2><span class="step-num" aria-hidden="true">$</span>What it costs</h2>
+      <p>This app is free to you. The only cost is the AI's, on your own Anthropic account, and it is small: very roughly <strong>10 to 50 cents</strong> for a first resume draft, <strong>a few cents</strong> to score one job, and <strong>a few tens of cents</strong> for a tailored resume and cover letter. A list of 50 jobs scored is a few dollars. You can see exactly what you have spent, and set a spending limit, in the <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer">Anthropic Console</a>.</p>
+    </section>
+
+    <section class="step">
+      <h2><span class="step-num" aria-hidden="true">P</span>Who can see your things</h2>
+      <ul class="plain-list">
+        <li><strong>Only you.</strong> Your resume, jobs, notes and keys are private to your account. Nobody else can see them, including the administrators.</li>
+        <li><strong>Files you add</strong> (LinkedIn data, old resumes) are read on the server and only their <em>text</em> is kept, never the file itself. You can remove any of them, and all your engagements, whenever you like.</li>
+        <li><strong>What goes to Anthropic:</strong> to draft, score or tailor, the relevant text (your resume and a posting, for example) is sent to Anthropic's AI using your key. It is not shown to anyone else.</li>
+        <li><strong>The Chrome extension's token</strong> can only add jobs to your list. It cannot read anything or sign in as you, and you can remove it on the Jobs page at any time.</li>
+      </ul>
+    </section>
+
+    <section class="step">
+      <h2><span class="step-num" aria-hidden="true">?</span>If you get stuck</h2>
+      <ul class="plain-list">
+        <li>The Chrome extension page has a troubleshooting list that uses the exact messages you will see: <a href="/extension.html">the extension page</a>.</li>
+        <li>Error messages in this app say what to do next in plain words. If a job will not score, the <a href="/jobs.html">Jobs page</a> tells you what is missing (usually a saved resume or your key).</li>
+        <li>For anything else, tell whoever invited you, and say which page you were on and what you pressed.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script src="{{ shared_assets_base }}/theme.js"></script>
+  <script src="{{ shared_assets_base }}/icons.js"></script>
+  <script src="/nav.js?v={{ asset_v('nav.js') }}"></script>
+  <script src="/welcome.js?v={{ asset_v('welcome.js') }}"></script>
+</body>
+</html>

@@ -577,3 +577,42 @@ textarea.yaml {
   font-size: 14px;
   line-height: 1.55;
 }
+
+/* Start here (welcome.html) */
+.next-step {
+  border-color: var(--accent, #2454ff);
+}
+
+.flow-strip {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 14px 0;
+  counter-reset: flow;
+}
+
+.flow-strip li {
+  flex: 1 1 130px;
+  counter-increment: flow;
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.3));
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: relative;
+}
+
+.flow-strip li::before {
+  content: counter(flow);
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.6;
+}
+
+.flow-strip li span {
+  font-size: 13px;
+  opacity: 0.75;
+}

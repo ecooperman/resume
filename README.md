@@ -44,6 +44,16 @@ lets people in on the Users page or the dashboard's People page), every resume a
   the page closed and a list of 100 is not a 25-minute request the proxy would cut off. Each job goes through the same `scoring.score_one` as the button. A problem that would be
   the same for every job (no key, no resume, the allowance used up, Anthropic refusing the key) ends the queue with its words; a job whose answer was unusable
   (`generate.UnusableAnswer`) is counted and the queue goes on.
+  **Tailored resume and cover letter** (`app/tailoring.py`, `generate.tailor_resume`; ported from time-management's `resume_gen.py`): the card's "Make a resume and cover letter for this job"
+  rewords a copy of the person's resume for the posting and writes a letter, in ONE AI run (their key, or the system key if allowed, counted as kind `tailor`; at most `TAILORS_PER_HOUR`
+  (30) an hour, one at a time per person). It is as long as a draft, so it runs in the background like drafting: `POST /api/jobs/{id}/tailor` returns at once, `GET .../tailor` is
+  `{state: idle | running | done | error}` (the page polls it with the spinner over the card, and picks a run back up after a reload), `DELETE` forgets how it ended. The result
+  (`generated_resume_yaml`, `generated_cover_letter`, `resume_generated_at`) is saved on the job only when it all worked, so a failed attempt never overwrites a good earlier one. The model is
+  told never to touch contact details, which jobs are left off the printed resume, or the private engagement notes, but that is also enforced in code afterwards
+  (`generate._keep_what_must_not_change`: `basics` other than `summary`, `include_in_resume` and `engagements` come back from the original, and a job kept off the resume is re-added if the
+  model dropped it). Downloads render on the spot, nothing stored as a file: `GET /api/jobs/{id}/resume?format=pdf|docx` and `.../cover-letter?format=pdf|docx` (the letterhead is the
+  tailored resume's `basics`). PDFs need Playwright's Chromium (installed on the droplet; on a new dev machine run `playwright install chromium`); Word files do not. The Word
+  renderer needs `basics.title` on the resume.
 - **Pushing jobs from the Chrome extension** (`app/push.py`, `app/tokens.py`, table `push_tokens`): a signed-in person makes a personal token on the Jobs page ("Connect the Chrome
   extension"; shown once, only its SHA-256 kept, up to 10, removing one revokes it). The extension sends `Authorization: Bearer <token>` to `POST /api/push/jobs`
   (`{jobs: [{url, title, company, salary, jd_text, optionally tier/summary/matched/gaps/strengths}], person_id?, score?}`, up to 200 postings and 12 MB) and `GET /api/push/ping`

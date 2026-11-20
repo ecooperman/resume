@@ -78,6 +78,78 @@ async function scoreJob(job, area) {
   return updated;
 }
 
+// --- tailoring: a resume and cover letter made for this job. It runs on the server in the background (a minute or two), so this only starts it and
+// asks how it is going; the card is covered by the spinner meanwhile, like scoring. ---------------------------------------------------------
+
+const POLL_MS = 3000;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Resolves with the job once the server has finished making its documents; rejects with the server's words if it could not.
+async function waitForTailoring(job) {
+  for (;;) {
+    const state = await Global.fetchJSON(`${JOBS_API}/${job.id}/tailor`);
+    if (state.state === "done" || state.state === "idle") break; // idle: finished and already collected (or the server restarted: the job then simply has no new documents)
+    if (state.state === "error") {
+      await Global.fetchJSON(`${JOBS_API}/${job.id}/tailor`, { method: "DELETE" }).catch(() => {});
+      throw new Error(state.error || "The resume couldn't be made.");
+    }
+    await sleep(POLL_MS);
+  }
+  await Global.fetchJSON(`${JOBS_API}/${job.id}/tailor`, { method: "DELETE" }).catch(() => {});
+  const updated = await Global.fetchJSON(`${JOBS_API}/${job.id}`);
+  details.set(job.id, updated);
+  jobs = jobs.map((j) => (j.id === job.id ? { ...j, ...updated } : j));
+  return updated;
+}
+
+const tailoring = new Set(); // job ids being watched, so opening a card again does not start a second poller
+
+async function tailorJob(job, card, alreadyRunning) {
+  if (tailoring.has(job.id)) return;
+  tailoring.add(job.id);
+  const run = async () => {
+    if (!alreadyRunning) await Global.fetchJSON(`${JOBS_API}/${job.id}/tailor`, { method: "POST" });
+    return waitForTailoring(job);
+  };
+  try {
+    await Global.withLoading(card, run());
+    Global.showMessage("Made a resume and cover letter for this job.", "success");
+  } catch (err) {
+    Global.showMessage(err.message, "error");
+  }
+  tailoring.delete(job.id);
+  render();
+}
+
+// The documents made for a job: downloads, the letter to read, and the button to make (or remake) them.
+function documentsBlock(job, full, card) {
+  const wrap = Global.el("div", { class: "job-documents" });
+  const make = Global.el("button", { type: "button", class: "secondary-btn", "data-btn-icon": "zap", text: job.has_documents ? "Make them again" : "Make a resume and cover letter for this job" });
+  make.disabled = !full.jd_text;
+  make.title = full.jd_text ? "" : "Add the job description first";
+  make.addEventListener("click", () => {
+    if (job.has_documents && !confirm("Make new ones? They replace the resume and cover letter made for this job before.")) return;
+    make.disabled = true;
+    tailorJob(job, card.closest(".item-card") || card, false);
+  });
+  if (!job.has_documents) {
+    wrap.append(Global.el("p", { class: "hint", text: "A copy of your resume reworded for this job (nothing invented) and a cover letter, ready to download." }), make);
+    return wrap;
+  }
+  const files = [["Resume", "resume"], ["Cover letter", "cover-letter"]].flatMap(([label, path]) =>
+    [["pdf", "PDF"], ["docx", "Word"]].map(([format, name]) => Global.el("a", { class: "secondary-btn", "data-btn-icon": "download", href: `${JOBS_API}/${job.id}/${path}?format=${format}`, text: `${label} (${name})` })));
+  const letter = Global.el("pre", { class: "job-letter hidden", text: full.generated_cover_letter || "" });
+  const read = Global.el("button", { type: "button", class: "secondary-btn", "data-btn-icon": "eye", text: "Read the cover letter" });
+  read.addEventListener("click", () => letter.classList.toggle("hidden"));
+  wrap.append(
+    Global.el("p", { class: "hint", text: `Made for this job ${when(job.resume_generated_at)}. Read them before you send them: they are written by an AI.` }),
+    Global.el("div", { class: "item-actions" }, files),
+    Global.el("div", { class: "item-actions" }, [read, make]),
+    letter,
+  );
+  return wrap;
+}
+
 // --- a card -----------------------------------------------------------------------------------------------------------------------------
 
 function jobCard(job) {
@@ -106,6 +178,8 @@ function jobCard(job) {
     }
     body.replaceChildren(jobDetail(job, details.get(job.id)));
     Global.iconifyButtons && Global.iconifyButtons(body);
+    // A run started before a reload (or on another device) is still going on the server: pick it back up.
+    Global.fetchJSON(`${JOBS_API}/${job.id}/tailor`).then((state) => { if (state.state === "running") tailorJob(job, card, true); }).catch(() => {});
   };
   summary.addEventListener("click", () => {
     if (card.classList.contains("expanded")) open();
@@ -151,6 +225,9 @@ function jobDetail(job, full) {
       scoreBtn.disabled = false;
     }
   });
+
+  const documents = documentsBlock(job, full, wrap);
+  wrap.appendChild(documents);
 
   const applied = Global.el("input", { type: "checkbox", id: `applied-${job.id}` });
   applied.checked = job.applied;

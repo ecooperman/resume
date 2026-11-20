@@ -53,6 +53,7 @@ MAX_IMPORT_ROWS = 1000
 MAX_IMPORT_BYTES = 8 * 1024 * 1024
 MAX_JD_CHARS = 60_000
 SCORES_PER_HOUR = 200  # scoring a job is one AI run; this keeps a stuck page or script from running up the bill, and still lets a long list through
+TAILORS_PER_HOUR = 30  # tailoring a resume and letter is a long, costly AI run (a draft's size); one at a time per person, and no more than this an hour
 
 # The installable zip of the job-scoring Chrome extension (built from its own repo with its package.py) lives in this folder; the install page serves the newest.
 EXTENSION_DIR = Path(__file__).parent.parent / "extension"

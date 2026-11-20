@@ -31,7 +31,7 @@ class User(Base):
 
 
 class HouseKeyUse(Base):
-    """One AI run (a draft, a pasted-list import or a review) that a person made on the server's key: counted against their monthly
+    """One AI run (a draft, a pasted-list import, a review, a score or a tailored resume) that a person made on the server's key: counted against their monthly
     allowance, and kept with the tokens it used so the administrator can see what it really cost. Never holds any text, only counts.
     NOT owned (shared_python.owned): the administrator reads everyone's totals; a person's own are picked out by user_id."""
 
@@ -39,7 +39,7 @@ class HouseKeyUse(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    kind = Column(String, nullable=False)  # draft | import | review
+    kind = Column(String, nullable=False)  # draft | import | review | score | tailor
     at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     input_tokens = Column(Integer, nullable=True)
     output_tokens = Column(Integer, nullable=True)

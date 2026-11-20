@@ -531,6 +531,7 @@ textarea.yaml {
 }
 
 .job-description,
+.job-documents,
 .job-score-area {
   margin: 10px 0;
 }
@@ -539,6 +540,15 @@ textarea.yaml {
 .item-card.is-loading > .spinner {
   top: 50%;
   margin-top: -13px;
+}
+
+.job-letter {
+  white-space: pre-wrap;
+  font-family: inherit;
+  background: var(--surface-2, rgba(127, 127, 127, 0.08));
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 8px 0 0;
 }
 
 #bulk-score {

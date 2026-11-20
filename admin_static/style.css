@@ -555,3 +555,15 @@ textarea.yaml {
   flex: 1 1 12em;
   min-width: 0;
 }
+
+/* A caution inside a page (the install page's LinkedIn warning). */
+.notice {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--warning, var(--border-strong));
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 14px;
+  line-height: 1.55;
+}

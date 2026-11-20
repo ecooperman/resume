@@ -54,6 +54,9 @@ MAX_IMPORT_BYTES = 8 * 1024 * 1024
 MAX_JD_CHARS = 60_000
 SCORES_PER_HOUR = 200  # scoring a job is one AI run; this keeps a stuck page or script from running up the bill, and still lets a long list through
 
+# The installable zip of the job-scoring Chrome extension (built from its own repo with its package.py) lives in this folder; the install page serves the newest.
+EXTENSION_DIR = Path(__file__).parent.parent / "extension"
+
 # The Chrome extension pushes jobs with a personal token (app/push.py): how many tokens one account may hold, how many postings and bytes one push may carry.
 PUSH_TOKEN_PREFIX = "rjt_"
 MAX_TOKENS_PER_ACCOUNT = 10

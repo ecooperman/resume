@@ -52,6 +52,14 @@ lets people in on the Users page or the dashboard's People page), every resume a
   are just saved. **How the door works:** `PushDoor` is ASGI middleware, outermost in the admin app, handing `/api/push/...` to a small token-only app that runs inside the
   token owner's `owned.scope`, so it skips the cookie gate and the cross-site check (an extension has neither) and opens nothing else; any other path with a token is refused. It
   exists only on the admin hostnames. CORS allows any origin without credentials, since the token is a header and never a cookie.
+- **The extension's install page and download** (`app/extension.py`, `admin_templates/extension.html`, `/extension.html`, `GET /api/extension`, `GET /extension/download`): the
+  extension is built and versioned in its own repo (`chrome-extensions/job-application-chrome-extension`); its `package.py` writes `job-scoring-extension-<version>.zip` (the
+  files git tracks, manifest at the top level, the same bytes every time, refuses to run with uncommitted changes), and that zip is committed here in `extension/`. The page
+  serves the NEWEST zip there (by version number) and shows its version and size; only signed-in people can reach it, and the file is always chosen by the server. The page walks through
+  unzipping, Developer mode and Load unpacked, connecting with a token from the Jobs page, and carries a caution that automated reading of LinkedIn lists is against LinkedIn's terms and risks the
+  user's own account (one page at a time is safest). `tests/test_extension.py` also checks the shipped zip is whole (its manifest agrees with its name, every script the popup injects is in it,
+  no stray files). **To release a new version:** bump `version` in the extension's `manifest.json`, commit and push there, run
+  `python3 package.py --to ~/code/personal-projects/resume/extension` (it deletes the older zip), then commit and push this repo.
 - **The system key** (`app/apikeys.py`): an administrator can tick **Can fall back to the system key** on the Users page for a particular person (`PUT
   /api/users/{id}/system-key`, `users.house_key`), who then uses the server's `ANTHROPIC_API_KEY` for the builder when they have not saved a key of their own;
   their own key, if they add one, is always used first, nobody else ever gets the server's, and an administrator's own use is never counted. Every run on it (a draft,

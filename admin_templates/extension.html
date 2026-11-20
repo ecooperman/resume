@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" data-ui="v2" data-theme-default="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chrome extension · Resume</title>
+  <link rel="stylesheet" href="{{ shared_assets_base }}/theme.css">
+  <script src="{{ shared_assets_base }}/theme-init.js"></script>
+  <link rel="stylesheet" href="/style.css?v={{ asset_v('style.css') }}">
+</head>
+<body>
+  <header class="app-header">
+    <h1>The Chrome extension</h1>
+    <p class="subtitle">Read a job posting (or a whole list) in Chrome and send it to your Jobs here, where it is scored against your resume. No exporting and importing.</p>
+  </header>
+
+  <div id="app-nav-mount"></div>
+
+  <main>
+    <div id="page-message" class="page-message hidden"></div>
+
+    <section class="step">
+      <h2><span class="step-num" aria-hidden="true">1</span>Download it <span id="ext-version" class="step-optional"></span></h2>
+      <div id="ext-download"></div>
+    </section>
+
+    <section class="step">
+      <h2><span class="step-num" aria-hidden="true">2</span>Install it in Chrome</h2>
+      <ol class="steps-list">
+        <li>Unzip the download. You get a folder with a file called <code>manifest.json</code> in it. <strong>Keep that folder somewhere permanent</strong> (Documents is fine): Chrome runs the extension from it, so deleting the folder removes the extension.</li>
+        <li>In Chrome, open <code>chrome://extensions</code> and turn on <strong>Developer mode</strong> (top right).</li>
+        <li>Press <strong>Load unpacked</strong> and choose the unzipped folder (the one that holds <code>manifest.json</code>, not a folder above it).</li>
+        <li>Click the puzzle-piece icon in Chrome's toolbar and pin <strong>Job Application Autofill</strong> so its button is always there.</li>
+      </ol>
+      <p class="hint">It is Chrome (or a browser built on it, such as Edge or Brave). Because it is installed from a folder rather than the Chrome Web Store, Chrome may remind you at start-up that you have a developer-mode extension; you can dismiss that.</p>
+    </section>
+
+    <section class="step">
+      <h2><span class="step-num" aria-hidden="true">3</span>Connect it to your Jobs</h2>
+      <ol class="steps-list">
+        <li>On <a href="/jobs.html">the Jobs page</a>, press <strong>Connect the Chrome extension</strong>, name a token (for example the computer it is for), and copy the token and the address it shows you. The token is shown once.</li>
+        <li>In the extension's options (right-click its icon, then <em>Options</em>), find <strong>Send to Jobs</strong>. Paste the address and the token, and choose <em>Send to my Jobs app, which scores them</em>.</li>
+        <li>Press <strong>Test connection</strong>; it should say whose Jobs it is connected to. Then press <strong>Save profile</strong> at the bottom of the page.</li>
+      </ol>
+      <p class="hint">The token only lets the extension add jobs to your list. It cannot read anything of yours or sign in as you, and you can remove it on the Jobs page whenever you like, which cuts that computer off at once. The scoring uses your own Anthropic key (or the system key, if the administrator has allowed it for you), set up under <a href="/build.html">Build my resume</a>.</p>
+    </section>
+
+    <section class="step">
+      <h2><span class="step-num" aria-hidden="true">4</span>Use it</h2>
+      <ul class="plain-list">
+        <li><strong>Send this job to Jobs</strong> works on any job posting page: it reads the page you are looking at and sends its text, title and link here.</li>
+        <li><strong>Send all jobs on this page to Jobs</strong> appears on LinkedIn's job search results and on your saved-jobs page, and sends each posting in the list.</li>
+        <li>Each job lands on your Jobs page and is scored in the background, so you can carry on browsing. Sending the same job twice is harmless: it is matched by its link and never overwrites your notes or its score.</li>
+      </ul>
+      <div class="notice">
+        <strong>Be careful with the list button on LinkedIn.</strong> LinkedIn's terms do not allow automated reading of its pages, and "Send all jobs on this page" clicks through postings (or opens each saved job) for you. LinkedIn may restrict an account it thinks is doing that, and the account at risk is yours, not ours. Sending <em>one page at a time</em> with <em>Send this job to Jobs</em>, while you are looking at it, is the safest way to use it.
+      </div>
+    </section>
+
+    <section class="step">
+      <h2><span class="step-num" aria-hidden="true">i</span>What it can see, and updating it</h2>
+      <ul class="plain-list">
+        <li>It does nothing until you press one of its buttons, and then it reads only that page (or, for the list buttons, the postings in the list). What it sends here is each posting's text, title, company and link, over a secure connection, with your token.</li>
+        <li>Your profile and token are stored only in your own browser.</li>
+        <li><strong>To update:</strong> when a newer version is posted here, download it, unzip it over the old folder (replacing the files), then press the circular arrow on the extension's card at <code>chrome://extensions</code>. Your settings are kept.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script src="{{ shared_assets_base }}/theme.js"></script>
+  <script src="{{ shared_assets_base }}/icons.js"></script>
+  <script src="/nav.js?v={{ asset_v('nav.js') }}"></script>
+  <script src="/extension.js?v={{ asset_v('extension.js') }}"></script>
+</body>
+</html>

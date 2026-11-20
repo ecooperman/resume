@@ -69,6 +69,11 @@ class ResumeGenerationError(Exception):
     attempt. Always has a message safe to show directly on the page."""
 
 
+class UnusableAnswer(ResumeGenerationError):
+    """The model answered, but not with something usable (cut off, or not the shape asked for). Trying the same thing again may well work,
+    and it says nothing about the key or the account, so a queue of many jobs can go on to the next."""
+
+
 def _check_unpacked_size(archive: zipfile.ZipFile, what: str) -> None:
     """A small file that unpacks to something enormous (a zip bomb) must not be opened. The sizes in the archive are what it
     claims; reads below are capped as well, since a claim can lie."""
@@ -396,7 +401,7 @@ def _ask_claude(client, system: str, messages: list, max_tokens: int, effort: st
     if usage is not None and getattr(response, "usage", None) is not None:  # what the call cost in tokens, for whoever is metering it (even if the answer is then refused)
         usage.append((getattr(response.usage, "input_tokens", 0) or 0, getattr(response.usage, "output_tokens", 0) or 0))
     if getattr(response, "stop_reason", None) == "max_tokens":
-        raise ResumeGenerationError("The answer ran past its length limit and was cut off, so it was not used (a cut-off resume would be missing its later jobs). Try again; if it keeps happening, remove an old resume or file you no longer need.")
+        raise UnusableAnswer("The answer ran past its length limit and was cut off, so it was not used (a cut-off resume would be missing its later jobs). Try again; if it keeps happening, remove an old resume or file you no longer need.")
     return "".join(block.text for block in response.content if block.type == "text")
 
 
@@ -620,7 +625,7 @@ def score_job(api_key: str, resume_data: dict, title: str, company: Optional[str
         if not isinstance(data, dict):
             raise ValueError("not an object")
     except ValueError:
-        raise ResumeGenerationError("Claude's score couldn't be read. Try again.")
+        raise UnusableAnswer("Claude's score couldn't be read. Try again.")
     tier = data.get("tier") if data.get("tier") in SCORE_TIERS else "Unclear"
 
     def items(key, one):

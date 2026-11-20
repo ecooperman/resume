@@ -37,9 +37,21 @@ lets people in on the Users page or the dashboard's People page), every resume a
   **Scoring** (`POST /api/jobs/{id}/score`, `generate.score_job`): reads the job's description and the person's resume (the one the job is tied to, else their default or
   only one) and saves a fit tier (Strong / Good / Possible / Weak / Unclear), a summary, what matches (with evidence), the gaps (must-have or nice-to-have), their strengths
   and the stated pay, in the same `|`-joined format as the extension's CSV and with the extension's rubric, so a score made here and an imported one mean the same. One AI run
-  (their own key, or the system key if an administrator allowed it, counted as kind `score`); the posting is cut at 12,000 characters; at most `SCORES_PER_HOUR` (60) an hour. The page
-  has a Score button per job (disabled until the job has a description, which can be pasted or edited on the card) and "Score the N jobs with no score yet", which runs one after
-  another with a count and a Stop button.
+  (their own key, or the system key if an administrator allowed it, counted as kind `score`); the posting is cut at 12,000 characters; at most `SCORES_PER_HOUR` (200) an hour. The page
+  has a Score button per job (disabled until the job has a description, which can be pasted or edited on the card) and "Score the N jobs with no score yet".
+  **The background queue** (`app/scoring.py`): that button (`POST /api/jobs/score-queue`; `GET .../score-queue/status`; `DELETE` stops, `?clear=true` forgets a finished one) and the
+  extension's pushes feed one in-memory queue per account, worked in a background thread (a restart forgets it; the button offers the rest again), so scoring carries on with
+  the page closed and a list of 100 is not a 25-minute request the proxy would cut off. Each job goes through the same `scoring.score_one` as the button. A problem that would be
+  the same for every job (no key, no resume, the allowance used up, Anthropic refusing the key) ends the queue with its words; a job whose answer was unusable
+  (`generate.UnusableAnswer`) is counted and the queue goes on.
+- **Pushing jobs from the Chrome extension** (`app/push.py`, `app/tokens.py`, table `push_tokens`): a signed-in person makes a personal token on the Jobs page ("Connect the Chrome
+  extension"; shown once, only its SHA-256 kept, up to 10, removing one revokes it). The extension sends `Authorization: Bearer <token>` to `POST /api/push/jobs`
+  (`{jobs: [{url, title, company, salary, jd_text, optionally tier/summary/matched/gaps/strengths}], person_id?, score?}`, up to 200 postings and 12 MB) and `GET /api/push/ping`
+  (whose Jobs it is connected to). A posting already there (same link) keeps its score, notes and `applied` mark and only gets the description, pay or company it was missing; the
+  ones with a description and no score are queued for scoring, unless the person has no resume or usable key, in which case the response says why (`scoring_blocked`) and they
+  are just saved. **How the door works:** `PushDoor` is ASGI middleware, outermost in the admin app, handing `/api/push/...` to a small token-only app that runs inside the
+  token owner's `owned.scope`, so it skips the cookie gate and the cross-site check (an extension has neither) and opens nothing else; any other path with a token is refused. It
+  exists only on the admin hostnames. CORS allows any origin without credentials, since the token is a header and never a cookie.
 - **The system key** (`app/apikeys.py`): an administrator can tick **Can fall back to the system key** on the Users page for a particular person (`PUT
   /api/users/{id}/system-key`, `users.house_key`), who then uses the server's `ANTHROPIC_API_KEY` for the builder when they have not saved a key of their own;
   their own key, if they add one, is always used first, nobody else ever gets the server's, and an administrator's own use is never counted. Every run on it (a draft,

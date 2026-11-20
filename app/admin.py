@@ -29,7 +29,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from . import access, apikeys, builder, config, crud, drafts, feedback, generate, invites, jobs, limits, render, users
+from . import access, apikeys, builder, config, crud, drafts, feedback, generate, invites, jobs, limits, push, render, tokens, users
 from .database import SessionLocal
 from .deps import get_db
 
@@ -39,9 +39,11 @@ SITE_DIR = config.SITE_DIR
 
 app = FastAPI(title="Resume Admin")
 access.install(app)  # only people with an account get in, each inside their own private data (app/access.py)
+app.add_middleware(push.PushDoor)  # added after the gate, so outermost: /api/push/... takes a personal token instead (app/push.py)
 app.include_router(users.router)
 app.include_router(invites.router)
 app.include_router(jobs.router)
+app.include_router(tokens.router)
 app.include_router(invites.app_router)
 templates = Jinja2Templates(directory=str(ADMIN_TEMPLATES_DIR))
 

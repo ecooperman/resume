@@ -17,6 +17,10 @@ class TooBusy(Exception):
     """Say so in words the person can act on."""
 
 
+class AtLimit(TooBusy):
+    """The hourly allowance is used up (as opposed to one already running): waiting a few seconds will not help."""
+
+
 def start(person_id: Hashable, now: float = None, max_runs: int = None, what: str = "draft") -> None:
     """Take a draft slot for this person (or for any other key, such as ("import", id), which then has its own count), or raise TooBusy. Call finish() when it is over, whether it worked or not."""
     now = time.time() if now is None else now
@@ -27,7 +31,7 @@ def start(person_id: Hashable, now: float = None, max_runs: int = None, what: st
         recent = [t for t in _recent.get(person_id, []) if now - t < WINDOW_SECONDS]
         if len(recent) >= allowed:
             wait = int((recent[0] + WINDOW_SECONDS - now) / 60) + 1
-            raise TooBusy(f"You can {what} {allowed} times an hour. Try again in about {wait} minute{'s' if wait != 1 else ''}.")
+            raise AtLimit(f"You can {what} {allowed} times an hour. Try again in about {wait} minute{'s' if wait != 1 else ''}.")
         recent.append(now)
         _recent[person_id] = recent
         _running.add(person_id)

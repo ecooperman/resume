@@ -70,6 +70,33 @@
       </div>
     </div>
 
+    <button id="show-connect" type="button" class="add-toggle">Connect the Chrome extension</button>
+    <div id="connect-card" class="add-card hidden">
+      <p class="hint">The job-scoring Chrome extension can send the postings it captures straight here, with no file to export and import. Make a token for each computer you use it on, paste it into the extension, and any job it sends is added to your Jobs and scored against your resume in the background. A token only lets the extension add jobs to your list; it can't read anything or sign in as you. It is shown once, so copy it now, and remove it here any time to cut that computer off.</p>
+      <div id="token-new" class="hidden">
+        <div class="field">
+          <label for="token-value">Your new token (copy it now: it won't be shown again)</label>
+          <div class="member-add"><input id="token-value" type="text" readonly spellcheck="false"><button type="button" id="copy-token" class="secondary-btn">Copy token</button></div>
+        </div>
+        <div class="field">
+          <label for="token-server">The address to give the extension</label>
+          <div class="member-add"><input id="token-server" type="text" readonly spellcheck="false"><button type="button" id="copy-server" class="secondary-btn">Copy address</button></div>
+        </div>
+      </div>
+      <div id="token-list" class="request-list"></div>
+      <div class="field-row">
+        <div class="field">
+          <label for="token-name">Make a token for</label>
+          <input id="token-name" type="text" maxlength="80" placeholder="e.g. Laptop Chrome" autocomplete="off" data-1p-ignore data-lpignore="true">
+        </div>
+      </div>
+      <div class="item-actions">
+        <button type="button" id="make-token" class="save-btn" data-btn-icon="plus">Make a token</button>
+        <button type="button" id="close-connect" class="cancel-btn">Close</button>
+        <span id="token-status" class="status" role="status"></span>
+      </div>
+    </div>
+
     <div id="bulk-score" class="item-actions hidden"></div>
     <div id="job-filters" class="job-filters" role="group" aria-label="Show jobs by fit"></div>
     <div id="jobs"></div>

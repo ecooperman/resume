@@ -52,7 +52,13 @@ MAX_JOBS_PER_ACCOUNT = 2000
 MAX_IMPORT_ROWS = 1000
 MAX_IMPORT_BYTES = 8 * 1024 * 1024
 MAX_JD_CHARS = 60_000
-SCORES_PER_HOUR = 60  # scoring a job is one AI run; this keeps a stuck page or script from running up the bill
+SCORES_PER_HOUR = 200  # scoring a job is one AI run; this keeps a stuck page or script from running up the bill, and still lets a long list through
+
+# The Chrome extension pushes jobs with a personal token (app/push.py): how many tokens one account may hold, how many postings and bytes one push may carry.
+PUSH_TOKEN_PREFIX = "rjt_"
+MAX_TOKENS_PER_ACCOUNT = 10
+MAX_PUSH_ITEMS = 200
+MAX_PUSH_BYTES = 12 * 1024 * 1024
 
 # How many different people an ordinary account may ask to have let in (administrators: no limit). Each email counts once, whatever
 # became of the request, until the person withdraws one still waiting, so being refused does not hand the slot back.

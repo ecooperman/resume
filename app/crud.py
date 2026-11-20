@@ -1,3 +1,4 @@
+import hashlib
 import re
 import secrets
 from datetime import datetime, timedelta
@@ -423,6 +424,101 @@ def import_jobs_from_csv(db: Session, rows: list, person_id: Optional[int] = Non
     return {"created": created, "updated": updated, "skipped": skipped}
 
 
+def push_jobs(db: Session, items: list, person_id: Optional[int] = None) -> dict:
+    """Add postings the Chrome extension captured. Like the CSV import, a posting already here (same link) is matched by url, but a push may
+    carry no score at all, so it is gentler: an existing job keeps its score, notes and 'applied' mark, and only gets the description,
+    pay or company it was missing. A posting that DOES come with a score (tier) refreshes the score fields as the import does. Returns the
+    counts and `to_score`, the ids of jobs now holding a description but no score, for the caller to queue."""
+    _check_person(db, person_id)
+    created = updated = skipped = 0
+    room = config.MAX_JOBS_PER_ACCOUNT - job_count(db)
+    touched = []
+    for item in items:
+        url = _clean(item.get("url"), 2000)
+        if not url:
+            skipped += 1
+            continue
+        title, company, salary = _clean(item.get("title"), 300), _clean(item.get("company"), 300), _clean(item.get("salary"), 300)
+        jd_text = _clean(item.get("jd_text"), config.MAX_JD_CHARS)
+        tier = _clean(item.get("tier"), 40)
+        existing = db.query(models.Job).filter(models.Job.url == url).first()
+        if existing is None:
+            if not title or room <= 0:
+                skipped += 1
+                continue
+            existing = models.Job(name=title, url=url, company=company, salary=salary, jd_text=jd_text, person_id=person_id)
+            db.add(existing)
+            room -= 1
+            created += 1
+        else:
+            existing.company = existing.company or company
+            existing.salary = existing.salary or salary
+            existing.jd_text = existing.jd_text or jd_text
+            if person_id is not None and existing.person_id is None:
+                existing.person_id = person_id
+            updated += 1
+        if tier:
+            existing.tier = tier
+            for field, limit in (("summary", 5000), ("matched", 8000), ("gaps", 8000), ("strengths", 8000)):
+                setattr(existing, field, _clean(item.get(field), limit))
+            existing.scored_at = datetime.utcnow()
+            if salary:
+                existing.salary = salary
+        touched.append(existing)
+    db.commit()
+    return {"created": created, "updated": updated, "skipped": skipped, "to_score": [j.id for j in touched if j.jd_text and not j.tier]}
+
+
+# --- personal tokens for the Chrome extension (app/push.py)
+
+
+def hash_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def list_tokens(db: Session) -> list[models.PushToken]:
+    return db.query(models.PushToken).order_by(models.PushToken.id.desc()).all()
+
+
+def create_token(db: Session, name: str) -> tuple[models.PushToken, str]:
+    """Make a token for the signed-in person. Returns the row and the token itself, which exists only in this return value: only its hash is kept."""
+    name = _clean(name, 80)
+    if not name:
+        raise JobError("Give the token a name, such as the computer it is for")
+    if db.query(func.count(models.PushToken.id)).scalar() >= config.MAX_TOKENS_PER_ACCOUNT:
+        raise JobError(f"You can have up to {config.MAX_TOKENS_PER_ACCOUNT} tokens. Remove one you no longer use first.")
+    raw = config.PUSH_TOKEN_PREFIX + secrets.token_urlsafe(32)
+    row = models.PushToken(name=name, prefix=raw[: len(config.PUSH_TOKEN_PREFIX) + 4], token_hash=hash_token(raw))
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row, raw
+
+
+def delete_token(db: Session, token_id: int) -> bool:
+    row = db.query(models.PushToken).filter(models.PushToken.id == token_id).first()
+    if row is None:
+        return False
+    db.delete(row)
+    db.commit()
+    return True
+
+
+def user_for_token(db: Session, raw: str) -> Optional[models.User]:
+    """Whose token this is, or None. Must run inside owned.unscoped() (it is the lookup that decides who the scope is). Notes when it was
+    last used, at most once a minute so a burst of pushes is not a burst of writes."""
+    if not raw or not raw.startswith(config.PUSH_TOKEN_PREFIX):
+        return None
+    row = db.query(models.PushToken).filter(models.PushToken.token_hash == hash_token(raw)).first()
+    if row is None:
+        return None
+    now = datetime.utcnow()
+    if row.last_used_at is None or now - row.last_used_at > timedelta(minutes=1):
+        row.last_used_at = now
+        db.commit()
+    return db.query(models.User).filter(models.User.id == row.owner_id).first()
+
+
 # --- the server's Anthropic key: who may use it, and what they have used (app/apikeys.py)
 
 
@@ -536,6 +632,7 @@ def delete_user_data(db: Session, user_id: int) -> dict:
     with owned.scope(user_id):
         slugs = [slug for (slug,) in db.query(models.Person.slug).all()]
         db.query(models.Job).delete(synchronize_session=False)  # before the resumes they point at
+        db.query(models.PushToken).delete(synchronize_session=False)
         codes = db.query(models.AccessCode).delete(synchronize_session=False)
         people = db.query(models.Person).delete(synchronize_session=False)
         keys = db.query(models.UserApiKey).delete(synchronize_session=False)

@@ -217,58 +217,105 @@ function renderFilters() {
   host.classList.toggle("hidden", jobs.length === 0);
 }
 
-// Score every job that has a description but no score yet, one after another, with a count; the person can stop. A problem that would hit every
-// job (no key, the hourly allowance) stops it with the reason; one job's own problem is skipped and reported at the end.
-let bulkRunning = false;
-let bulkStop = false;
+// Score every job that has a description but no score yet. The server does it in the background (app/scoring.py), so it carries on if this page
+// is closed, and the extension's pushes join the same queue. This page only starts it, shows how it is going, and picks up where it is when
+// it is opened. A problem that would hit every job (no key, the hourly allowance) ends it with the reason; one job's own problem is counted.
+const QUEUE_API = `${JOBS_API}/score-queue`;
+let queue = { state: "idle" };
+let pollTimer = null;
+let lastCount = -1;
 
 function renderBulk() {
   const host = document.getElementById("bulk-score");
   const todo = jobs.filter((j) => !j.tier && j.has_description);
-  host.classList.toggle("hidden", todo.length === 0 && !bulkRunning);
-  if (bulkRunning) return;
+  const running = queue.state === "running";
+  host.classList.toggle("hidden", todo.length === 0 && !running);
+  if (running) {
+    const finished = queue.done + queue.failed;
+    const status = Global.el("span", { class: "status", id: "bulk-status", role: "status", text: `Scoring in the background: ${finished} of ${queue.total} done. You can leave this page; it carries on.` });
+    const stop = Global.el("button", { type: "button", class: "cancel-btn", text: "Stop" });
+    stop.addEventListener("click", async () => {
+      stop.disabled = true;
+      try {
+        queue = await Global.fetchJSON(QUEUE_API, { method: "DELETE" });
+      } catch (err) {
+        Global.showMessage(err.message, "error");
+      }
+    });
+    host.replaceChildren(status, stop);
+    Global.iconifyButtons && Global.iconifyButtons(host);
+    return;
+  }
   const button = Global.el("button", { type: "button", class: "secondary-btn", "data-btn-icon": "zap", text: `Score the ${todo.length} job${todo.length === 1 ? "" : "s"} with no score yet` });
-  button.addEventListener("click", () => scoreAll(todo.map((j) => j.id)));
+  button.addEventListener("click", startQueue);
   host.replaceChildren(button, Global.el("span", { class: "status", id: "bulk-status", role: "status" }));
   Global.iconifyButtons && Global.iconifyButtons(host);
 }
 
-async function scoreAll(ids) {
-  bulkRunning = true;
-  bulkStop = false;
-  const host = document.getElementById("bulk-score");
-  const stop = Global.el("button", { type: "button", class: "cancel-btn", text: "Stop" });
-  stop.addEventListener("click", () => {
-    bulkStop = true;
-    stop.disabled = true;
-  });
-  const status = Global.el("span", { class: "status", role: "status" });
-  host.replaceChildren(status, stop);
-  let done = 0;
-  const skipped = [];
-  let fatal = "";
-  for (const id of ids) {
-    if (bulkStop) break;
-    status.textContent = `Scoring ${done + skipped.length + 1} of ${ids.length}... (about 15 seconds each; keep this page open)`;
-    try {
-      await scoreJob({ id }, document.getElementById("jobs"));
-      done++;
-      render();
-    } catch (err) {
-      if (/key|times an hour|runs on the system key/i.test(err.message)) {
-        fatal = err.message;
-        break;
-      }
-      skipped.push(err.message);
-    }
+async function startQueue() {
+  try {
+    queue = await Global.fetchJSON(QUEUE_API, { method: "POST" });
+    lastCount = -1;
+    renderBulk();
+    poll();
+  } catch (err) {
+    Global.showMessage(err.message, "error");
   }
-  bulkRunning = false;
+}
+
+// Say how a finished queue ended (once), forget it on the server, and refresh the list with the scores.
+async function reportEnd(ended) {
+  const parts = [`Scored ${ended.done} job${ended.done === 1 ? "" : "s"}.`];
+  if (ended.failed) parts.push(`${ended.failed} could not be scored${ended.first_failure ? ` (${ended.first_failure})` : ""}.`);
+  if (ended.state === "stopped") parts.push("Stopped.");
+  if (ended.state === "error" && ended.error) parts.push(`Stopped: ${ended.error}`);
+  Global.showMessage(parts.join(" "), ended.state === "error" || ended.failed ? "error" : "success");
+  try {
+    await Global.fetchJSON(`${QUEUE_API}?clear=true`, { method: "DELETE" });
+  } catch (err) {
+    /* it is forgotten after an hour anyway */
+  }
+}
+
+async function poll() {
+  clearTimeout(pollTimer);
+  let next;
+  try {
+    next = await Global.fetchJSON(`${QUEUE_API}/status`);
+  } catch (err) {
+    pollTimer = setTimeout(poll, 8000);
+    return;
+  }
+  const wasRunning = queue.state === "running";
+  queue = next;
+  if (queue.state === "running") {
+    const count = queue.done + queue.failed;
+    if (count !== lastCount) {
+      lastCount = count;
+      await refreshJobs(); // scores show up as they arrive
+    }
+    renderBulk();
+    pollTimer = setTimeout(poll, 3000);
+    return;
+  }
+  if (queue.state !== "idle") {
+    await refreshJobs();
+    await reportEnd(queue);
+    queue = { state: "idle" };
+  } else if (wasRunning) {
+    await refreshJobs();
+  }
   render();
-  const parts = [`Scored ${done}.`];
-  if (skipped.length) parts.push(`${skipped.length} skipped: ${skipped[0]}`);
-  if (bulkStop) parts.push("Stopped.");
-  if (fatal) parts.push(`Stopped: ${fatal}`);
-  Global.showMessage(parts.join(" "), fatal || skipped.length ? "error" : "success");
+}
+
+async function refreshJobs() {
+  try {
+    jobs = await Global.fetchJSON(JOBS_API);
+    for (const id of [...details.keys()]) if (!jobs.some((j) => j.id === id)) details.delete(id);
+    render();
+  } catch (err) {
+    /* the next poll tries again */
+  }
 }
 
 function render() {
@@ -290,6 +337,7 @@ async function load() {
   try {
     jobs = await Global.withLoading(document.getElementById("jobs"), Global.fetchJSON(JOBS_API));
     render();
+    poll(); // is the server already scoring some (the extension pushed jobs, or this was started earlier)?
   } catch (err) {
     document.getElementById("jobs").replaceChildren(Global.el("p", { class: "hint is-error", text: err.message }));
   }
@@ -364,6 +412,92 @@ document.getElementById("import-btn").addEventListener("click", async () => {
   } catch (err) {
     status.textContent = err.message;
   }
+});
+
+// --- connecting the Chrome extension: personal tokens ----------------------------------------------------------------------------------
+
+const TOKENS_API = "/api/tokens";
+const closeConnect = toggleForm("show-connect", "connect-card", null);
+document.getElementById("close-connect").addEventListener("click", closeConnect);
+
+function when_(iso) {
+  return iso ? new Date(iso).toLocaleString() : "";
+}
+
+async function loadTokens() {
+  const host = document.getElementById("token-list");
+  try {
+    const rows = await Global.fetchJSON(TOKENS_API);
+    host.replaceChildren(
+      ...rows.map((t) => {
+        const remove = Global.el("button", { type: "button", class: "danger-btn", text: "Remove" });
+        remove.addEventListener("click", async () => {
+          if (!confirm(`Remove the token "${t.name}"?\n\nThe extension using it stops working until you give it a new one.`)) return;
+          try {
+            await Global.fetchJSON(`${TOKENS_API}/${t.id}`, { method: "DELETE" });
+            loadTokens();
+          } catch (err) {
+            Global.showMessage(err.message, "error");
+          }
+        });
+        const used = t.last_used_at ? `last used ${when_(t.last_used_at)}` : "never used";
+        return Global.el("div", { class: "request-card" }, [
+          Global.el("div", { class: "request-info" }, [Global.el("strong", { text: t.name }), Global.el("div", { class: "field-hint", text: `${t.prefix}... made ${when_(t.created_at)}, ${used}` })]),
+          Global.el("div", { class: "request-actions" }, [remove]),
+        ]);
+      })
+    );
+    Global.iconifyButtons && Global.iconifyButtons(host);
+  } catch (err) {
+    host.replaceChildren(Global.el("p", { class: "field-hint is-error", text: err.message }));
+  }
+}
+
+async function copyFrom(inputId, button, done) {
+  const input = document.getElementById(inputId);
+  try {
+    await navigator.clipboard.writeText(input.value);
+    Global.showMessage(done, "success");
+  } catch (err) {
+    input.select(); // no clipboard access here: leave it selected for the person to copy
+    Global.showMessage("Couldn't copy automatically. It is selected: press Ctrl+C (or Cmd+C).", "error");
+  }
+}
+document.getElementById("copy-token").addEventListener("click", (e) => copyFrom("token-value", e.target, "Token copied."));
+document.getElementById("copy-server").addEventListener("click", (e) => copyFrom("token-server", e.target, "Address copied."));
+document.getElementById("show-connect").addEventListener("click", loadTokens);
+
+document.getElementById("make-token").addEventListener("click", async (e) => {
+  const name = document.getElementById("token-name");
+  const status = document.getElementById("token-status");
+  status.textContent = "";
+  const button = e.currentTarget;
+  button.disabled = true;
+  try {
+    const made = await Global.fetchJSON(TOKENS_API, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ name: name.value }) });
+    name.value = "";
+    document.getElementById("token-value").value = made.token;
+    document.getElementById("token-server").value = location.origin;
+    document.getElementById("token-new").classList.remove("hidden");
+    document.getElementById("token-value").select();
+    loadTokens();
+  } catch (err) {
+    status.textContent = err.message;
+  }
+  button.disabled = false;
+});
+document.getElementById("token-name").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("make-token").click();
+});
+// The new token is gone from the page once the card is closed: it cannot be shown again.
+document.getElementById("close-connect").addEventListener("click", () => {
+  document.getElementById("token-value").value = "";
+  document.getElementById("token-new").classList.add("hidden");
+});
+
+// Jobs may have arrived (from the extension) or been scored while this tab was in the background.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") load();
 });
 
 async function start() {

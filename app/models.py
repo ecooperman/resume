@@ -123,6 +123,21 @@ class Job(Base, owned.OwnedMixin):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class PushToken(Base, owned.OwnedMixin):
+    """A personal token the job-scoring Chrome extension sends to push postings into its owner's Jobs (app/push.py). Made by the signed-in
+    person on the Jobs page, shown to them ONCE, and only its SHA-256 kept (the token is long and random, so a plain hash is enough: a
+    stolen database does not hand out working tokens). Deleting the row revokes it. `prefix` is just enough to tell one from another."""
+
+    __tablename__ = "push_tokens"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)  # what the person calls it, e.g. "Laptop Chrome"
+    prefix = Column(String, nullable=False)
+    token_hash = Column(String, nullable=False, unique=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_used_at = Column(DateTime, nullable=True)
+
+
 class AccessCode(Base, owned.OwnedMixin):
     """A capability token that unlocks the full resume (contact info +
     unredacted downloads) when passed as ?code=... on any route.

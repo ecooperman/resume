@@ -51,16 +51,29 @@ function scoreBlock(job, full) {
     block.appendChild(Global.el("div", { class: "job-score-section" }, [Global.el("div", { class: "job-score-label", text: label }), Global.el("ul", {}, items.map((t) => Global.el("li", { text: t })))]));
   }
   if (!job.tier && !job.summary) block.appendChild(Global.el("p", { class: "hint", text: "Not scored yet." }));
-  if (full && full.jd_text) {
-    const text = Global.el("pre", { class: "job-jd hidden", text: full.jd_text });
-    const toggle = Global.el("button", { type: "button", class: "secondary-btn", "data-btn-icon": "eye", text: "Show the job description" });
-    toggle.addEventListener("click", () => {
-      const hidden = text.classList.toggle("hidden");
-      toggle.textContent = hidden ? "Show the job description" : "Hide the job description";
-    });
-    block.append(toggle, text);
-  }
   return block;
+}
+
+// The job description, editable (a job pasted without one can get it here): scoring and tailoring read it.
+function descriptionEditor(job, full) {
+  const text = Global.el("textarea", { class: "job-jd", rows: "8", "aria-label": `Job description for ${job.name}`, placeholder: "Paste the posting's text here. Scoring and the tailored resume read it." });
+  text.value = full.jd_text || "";
+  const save = Global.el("button", { type: "button", class: "secondary-btn", "data-btn-icon": "check", text: "Save description" });
+  save.addEventListener("click", () => patchJob(job, { jd_text: text.value }, "Description saved."));
+  const field = Global.el("div", { class: "field hidden" }, [text, save]);
+  const toggle = Global.el("button", { type: "button", class: "secondary-btn", "data-btn-icon": "eye", text: full.jd_text ? "Show or edit the job description" : "Add the job description" });
+  toggle.addEventListener("click", () => field.classList.toggle("hidden"));
+  if (!full.jd_text) field.classList.remove("hidden");
+  return Global.el("div", { class: "job-description" }, [toggle, field]);
+}
+
+// --- scoring ---------------------------------------------------------------------------------------------------------------------------
+
+async function scoreJob(job, area) {
+  const updated = await Global.withLoading(area, Global.fetchJSON(`${JOBS_API}/${job.id}/score`, { method: "POST" }));
+  details.set(job.id, updated);
+  jobs = jobs.map((j) => (j.id === job.id ? { ...j, ...updated } : j));
+  return updated;
 }
 
 // --- a card -----------------------------------------------------------------------------------------------------------------------------
@@ -119,7 +132,23 @@ function jobDetail(job, full) {
   if (job.scored_at) links.push(Global.el("span", { class: "hint", text: `Scored ${when(job.scored_at)}` }));
   if (job.created_at) links.push(Global.el("span", { class: "hint", text: `Added ${when(job.created_at)}` }));
   if (links.length) wrap.appendChild(Global.el("div", { class: "job-links" }, links));
-  wrap.appendChild(scoreBlock(job, full));
+  const scoreArea = Global.el("div", { class: "job-score-area" }, [scoreBlock(job, full)]);
+  wrap.appendChild(scoreArea);
+  wrap.appendChild(descriptionEditor(job, full));
+  const scoreBtn = Global.el("button", { type: "button", class: "secondary-btn", "data-btn-icon": "zap", text: job.tier ? "Score again" : "Score this job" });
+  scoreBtn.disabled = !full.jd_text;
+  scoreBtn.title = full.jd_text ? "" : "Add the job description first";
+  scoreBtn.addEventListener("click", async () => {
+    scoreBtn.disabled = true;
+    try {
+      const updated = await scoreJob(job, scoreArea);
+      Global.showMessage(`Scored: ${updated.tier}.`, "success");
+      render();
+    } catch (err) {
+      Global.showMessage(err.message, "error");
+      scoreBtn.disabled = false;
+    }
+  });
 
   const applied = Global.el("input", { type: "checkbox", id: `applied-${job.id}` });
   applied.checked = job.applied;
@@ -132,7 +161,7 @@ function jobDetail(job, full) {
   saveNotes.addEventListener("click", () => patchJob(job, { notes: notes.value }, "Notes saved."));
   wrap.appendChild(Global.el("div", { class: "field" }, [Global.el("label", { text: "Notes" }), notes]));
 
-  const actions = Global.el("div", { class: "item-actions" }, [saveNotes]);
+  const actions = Global.el("div", { class: "item-actions" }, [scoreBtn, saveNotes]);
   const remove = Global.el("button", { type: "button", class: "danger-btn", text: "Delete this job" });
   remove.addEventListener("click", async () => {
     if (!confirm(`Delete "${job.name}"${job.company ? ` at ${job.company}` : ""}? Its score and any resume made for it go too.`)) return;
@@ -188,8 +217,63 @@ function renderFilters() {
   host.classList.toggle("hidden", jobs.length === 0);
 }
 
+// Score every job that has a description but no score yet, one after another, with a count; the person can stop. A problem that would hit every
+// job (no key, the hourly allowance) stops it with the reason; one job's own problem is skipped and reported at the end.
+let bulkRunning = false;
+let bulkStop = false;
+
+function renderBulk() {
+  const host = document.getElementById("bulk-score");
+  const todo = jobs.filter((j) => !j.tier && j.has_description);
+  host.classList.toggle("hidden", todo.length === 0 && !bulkRunning);
+  if (bulkRunning) return;
+  const button = Global.el("button", { type: "button", class: "secondary-btn", "data-btn-icon": "zap", text: `Score the ${todo.length} job${todo.length === 1 ? "" : "s"} with no score yet` });
+  button.addEventListener("click", () => scoreAll(todo.map((j) => j.id)));
+  host.replaceChildren(button, Global.el("span", { class: "status", id: "bulk-status", role: "status" }));
+  Global.iconifyButtons && Global.iconifyButtons(host);
+}
+
+async function scoreAll(ids) {
+  bulkRunning = true;
+  bulkStop = false;
+  const host = document.getElementById("bulk-score");
+  const stop = Global.el("button", { type: "button", class: "cancel-btn", text: "Stop" });
+  stop.addEventListener("click", () => {
+    bulkStop = true;
+    stop.disabled = true;
+  });
+  const status = Global.el("span", { class: "status", role: "status" });
+  host.replaceChildren(status, stop);
+  let done = 0;
+  const skipped = [];
+  let fatal = "";
+  for (const id of ids) {
+    if (bulkStop) break;
+    status.textContent = `Scoring ${done + skipped.length + 1} of ${ids.length}... (about 15 seconds each; keep this page open)`;
+    try {
+      await scoreJob({ id }, document.getElementById("jobs"));
+      done++;
+      render();
+    } catch (err) {
+      if (/key|times an hour|runs on the system key/i.test(err.message)) {
+        fatal = err.message;
+        break;
+      }
+      skipped.push(err.message);
+    }
+  }
+  bulkRunning = false;
+  render();
+  const parts = [`Scored ${done}.`];
+  if (skipped.length) parts.push(`${skipped.length} skipped: ${skipped[0]}`);
+  if (bulkStop) parts.push("Stopped.");
+  if (fatal) parts.push(`Stopped: ${fatal}`);
+  Global.showMessage(parts.join(" "), fatal || skipped.length ? "error" : "success");
+}
+
 function render() {
   renderFilters();
+  renderBulk();
   const host = document.getElementById("jobs");
   const shown = visibleJobs();
   if (!jobs.length) {

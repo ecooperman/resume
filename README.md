@@ -34,6 +34,12 @@ lets people in on the Users page or the dashboard's People page), every resume a
   score fields only and never touches `applied`, notes or a resume made for the job; the resume label on an import fills in old jobs that have none and never
   re-tags one that does. Limits: `MAX_JOBS_PER_ACCOUNT` 2000, `MAX_IMPORT_ROWS` 1000, `MAX_IMPORT_BYTES` 8 MB, descriptions cut at 60,000 characters. This
   replaces time-management's Jobs page (the direction decided 2026-11-18: one place for the builder, the jobs and the tailored resumes).
+  **Scoring** (`POST /api/jobs/{id}/score`, `generate.score_job`): reads the job's description and the person's resume (the one the job is tied to, else their default or
+  only one) and saves a fit tier (Strong / Good / Possible / Weak / Unclear), a summary, what matches (with evidence), the gaps (must-have or nice-to-have), their strengths
+  and the stated pay, in the same `|`-joined format as the extension's CSV and with the extension's rubric, so a score made here and an imported one mean the same. One AI run
+  (their own key, or the system key if an administrator allowed it, counted as kind `score`); the posting is cut at 12,000 characters; at most `SCORES_PER_HOUR` (60) an hour. The page
+  has a Score button per job (disabled until the job has a description, which can be pasted or edited on the card) and "Score the N jobs with no score yet", which runs one after
+  another with a count and a Stop button.
 - **The system key** (`app/apikeys.py`): an administrator can tick **Can fall back to the system key** on the Users page for a particular person (`PUT
   /api/users/{id}/system-key`, `users.house_key`), who then uses the server's `ANTHROPIC_API_KEY` for the builder when they have not saved a key of their own;
   their own key, if they add one, is always used first, nobody else ever gets the server's, and an administrator's own use is never counted. Every run on it (a draft,

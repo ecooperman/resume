@@ -52,6 +52,7 @@ MAX_JOBS_PER_ACCOUNT = 2000
 MAX_IMPORT_ROWS = 1000
 MAX_IMPORT_BYTES = 8 * 1024 * 1024
 MAX_JD_CHARS = 60_000
+SCORES_PER_HOUR = 60  # scoring a job is one AI run; this keeps a stuck page or script from running up the bill
 
 # How many different people an ordinary account may ask to have let in (administrators: no limit). Each email counts once, whatever
 # became of the request, until the person withdraws one still waiting, so being refused does not hand the slot back.

@@ -8,11 +8,14 @@ import io
 from datetime import datetime
 from typing import Optional
 
+import yaml
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
+from shared_python import accounts_gate
+from shared_python.accounts_gate import Account
 from sqlalchemy.orm import Session
 
-from . import config, crud, models
+from . import apikeys, config, crud, generate, limits, models
 from .deps import get_db
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -122,3 +125,55 @@ def update_job(job_id: int, body: JobPatch, db: Session = Depends(get_db)):
 def delete_job(job_id: int, db: Session = Depends(get_db)):
     crud.delete_job(db, _get(db, job_id))
     return {"ok": True}
+
+
+# --- scoring: how well this job fits the person's resume -------------------------------------------------------------------------------
+
+
+def resume_for(db: Session, job: models.Job) -> models.Person:
+    """Which of the person's resumes a job is scored (and later tailored) from: the one it is tied to, else their default or only one."""
+    person = crud.get_person(db, job.person_id) if job.person_id else None
+    if person is None:
+        person = crud.get_default_person(db)
+    if person is None:
+        people = crud.list_people(db)
+        person = people[0] if people else None
+    if person is None:
+        raise HTTPException(status_code=400, detail="Save your resume first (Build my resume): a job is scored against it.")
+    return person
+
+
+@router.post("/{job_id}/score")
+def score_job(job_id: int, account: Account = Depends(accounts_gate.current_account), db: Session = Depends(get_db)):
+    """Score this job against the person's resume (fit tier, what matches, the gaps, their strengths, the pay) and keep the result on the job.
+    One AI run, on their own key, or the system key if an administrator allowed them it (counted)."""
+    job = _get(db, job_id)
+    if not (job.jd_text or "").strip():
+        raise HTTPException(status_code=400, detail="Paste this job's description first: scoring reads it.")
+    person = resume_for(db, job)
+    try:
+        resume_data = yaml.safe_load(person.resume_yaml)
+    except yaml.YAMLError:
+        raise HTTPException(status_code=400, detail="Your resume couldn't be read: fix it on the People page first.")
+    choice = apikeys.pick(db, account)
+    try:
+        limits.start(("score", account.id), max_runs=config.SCORES_PER_HOUR, what="score")
+    except limits.TooBusy as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    used: list = []
+    try:
+        result = generate.score_job(choice.key, resume_data, job.name, job.company, job.jd_text, usage=used)
+    except generate.ResumeGenerationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        limits.finish(("score", account.id))
+        if choice.metered:
+            crud.record_house_use(db, account.id, "score", used)
+    for field in ("tier", "summary", "matched", "gaps", "strengths"):
+        setattr(job, field, result[field] or None)
+    if result["salary"]:
+        job.salary = result["salary"]
+    job.scored_at = datetime.utcnow()
+    db.commit()
+    db.refresh(job)
+    return _detail(job)

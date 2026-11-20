@@ -180,7 +180,7 @@ INK = (0x1A, 0x1D, 0x23)
 
 def build_docx(data, out_dir):
     data = _collapse_dashes(data)
-    basics = data["basics"]
+    basics = data["basics"]  # only the top-level `basics` key is required; everything inside it (and every section below) is optional, as in the web page
     doc = Document()
 
     style = doc.styles["Normal"]
@@ -192,9 +192,10 @@ def build_docx(data, out_dir):
         section.left_margin = Inches(0.75)
         section.right_margin = Inches(0.75)
 
-    _run(doc.add_paragraph(), basics["name"], bold=True, size=22, color=INK)
+    _run(doc.add_paragraph(), basics.get("name", ""), bold=True, size=22, color=INK)
 
-    _run(doc.add_paragraph(), basics["title"], bold=True, size=12, color=ACCENT)
+    if basics.get("title"):
+        _run(doc.add_paragraph(), basics["title"], bold=True, size=12, color=ACCENT)
 
     contact_bits = [basics.get("location", ""), basics.get("email", ""), basics.get("phone", "")]
     for key in ("website", "linkedin", "github"):
@@ -206,18 +207,18 @@ def build_docx(data, out_dir):
         doc.add_paragraph()
         _run(doc.add_paragraph(), basics["summary"].strip(), size=10, color=MUTED)
 
-    _heading(doc, "Experience")
+    shown_jobs = [j for j in data.get("experience") or [] if j.get("include_in_resume", True)]
+    if shown_jobs:
+        _heading(doc, "Experience")
     # include_in_resume: false keeps a job in the source YAML (still
     # available as context for e.g. cover-letter generation) while leaving
     # it off the rendered Experience list - same as resume.html.j2's
     # experience loop. Defaults to included when the key is absent.
-    for job in data.get("experience", []):
-        if not job.get("include_in_resume", True):
-            continue
+    for job in shown_jobs:
         header_paragraphs = []
 
         p = doc.add_paragraph()
-        _run(p, job["title"], bold=True, size=11, color=INK)
+        _run(p, job.get("title", ""), bold=True, size=11, color=INK)
         _run(p, f"\t{job.get('start', '')} – {job.get('end', '')}", size=9.5, color=MUTED)
         header_paragraphs.append(p)
 
@@ -239,8 +240,9 @@ def build_docx(data, out_dir):
 
         _keep_header_together(header_paragraphs, bullet_paragraphs[0] if bullet_paragraphs else None)
 
-    _heading(doc, "Education")
-    for ed in data.get("education", []):
+    if data.get("education"):
+        _heading(doc, "Education")
+    for ed in data.get("education") or []:
         entry_paragraphs = []
 
         p = doc.add_paragraph()
@@ -262,21 +264,23 @@ def build_docx(data, out_dir):
         _heading(doc, "Certifications")
         for cert in data["certifications"]:
             p = doc.add_paragraph(style="List Bullet")
-            _run(p, cert["name"], size=10, color=INK)
+            _run(p, cert.get("name", ""), size=10, color=INK)
             if cert.get("issuer"):
                 _run(p, f" - {cert['issuer']}", size=9.5, color=MUTED)
 
-    _heading(doc, "Skills")
-    for s in data.get("skills", []):
+    if data.get("skills"):
+        _heading(doc, "Skills")
+    for s in data.get("skills") or []:
         p = doc.add_paragraph()
-        _run(p, f"{s['category']}: ", bold=True, size=10, color=INK)
+        if s.get("category"):
+            _run(p, f"{s['category']}: ", bold=True, size=10, color=INK)
         _run(p, ", ".join(s.get("items", [])), size=10, color=INK)
 
     if data.get("projects"):
         _heading(doc, "Projects")
         for proj in data["projects"]:
             p = doc.add_paragraph()
-            _run(p, proj["name"], bold=True, size=10.5, color=INK)
+            _run(p, proj.get("name", ""), bold=True, size=10.5, color=INK)
             if proj.get("link"):
                 _run(p, f" - {proj['link']}", size=9.5, color=MUTED)
             _run(doc.add_paragraph(), proj.get("description", ""), size=10, color=INK)

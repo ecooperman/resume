@@ -239,7 +239,7 @@
       <div class="hero-top">
         <div>
           <h1>{{ basics.name }}</h1>
-          <p class="role">{{ basics.title }}</p>
+          {% if basics.title %}<p class="role">{{ basics.title }}</p>{% endif %}
         </div>
         <div class="contact">
           {% if basics.location %}{{ basics.location }}<br>{% endif %}

@@ -70,7 +70,9 @@ function descriptionEditor(job, full) {
 // --- scoring ---------------------------------------------------------------------------------------------------------------------------
 
 async function scoreJob(job, area) {
-  const updated = await Global.withLoading(area, Global.fetchJSON(`${JOBS_API}/${job.id}/score`, { method: "POST" }));
+  // The spinner covers the whole card (its header, score, description and buttons all stand still while the AI reads), not just the part that will change.
+  const card = area.closest(".item-card") || area;
+  const updated = await Global.withLoading(card, Global.fetchJSON(`${JOBS_API}/${job.id}/score`, { method: "POST" }));
   details.set(job.id, updated);
   jobs = jobs.map((j) => (j.id === job.id ? { ...j, ...updated } : j));
   return updated;

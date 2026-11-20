@@ -535,6 +535,12 @@ textarea.yaml {
   margin: 10px 0;
 }
 
+/* While a job is being scored the spinner covers the whole card; centred, so it is in view however tall the open card is. */
+.item-card.is-loading > .spinner {
+  top: 50%;
+  margin-top: -13px;
+}
+
 #bulk-score {
   margin: 12px 0;
 }

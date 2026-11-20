@@ -523,8 +523,9 @@ async function loadTokens() {
           }
         });
         const used = t.last_used_at ? `last used ${when_(t.last_used_at)}` : "never used";
+        const version = t.extension_version ? `, extension ${t.extension_version}${t.update_available ? ` (version ${t.extension_latest} is available)` : ""}` : "";
         return Global.el("div", { class: "request-card" }, [
-          Global.el("div", { class: "request-info" }, [Global.el("strong", { text: t.name }), Global.el("div", { class: "field-hint", text: `${t.prefix}... made ${when_(t.created_at)}, ${used}` })]),
+          Global.el("div", { class: "request-info" }, [Global.el("strong", { text: t.name }), Global.el("div", { class: "field-hint", text: `${t.prefix}... made ${when_(t.created_at)}, ${used}${version}` })]),
           Global.el("div", { class: "request-actions" }, [remove]),
         ]);
       })
@@ -532,6 +533,52 @@ async function loadTokens() {
     Global.iconifyButtons && Global.iconifyButtons(host);
   } catch (err) {
     host.replaceChildren(Global.el("p", { class: "field-hint is-error", text: err.message }));
+  }
+}
+
+// "Before you start": scoring and tailoring need a saved resume and a usable Anthropic key (their own, or the system key if an administrator allowed it).
+// Shown until both are in place, each line saying whether it is done, so a new person is never left to find out from an error message.
+async function checkGettingStarted() {
+  const box = document.getElementById("getting-started");
+  try {
+    const [people, key] = await Promise.all([Global.fetchJSON("/api/people"), Global.fetchJSON("/api/api-key")]);
+    const haveResume = people.length > 0;
+    const haveKey = Boolean(key.usable);
+    box.classList.toggle("hidden", haveResume && haveKey);
+    if (haveResume && haveKey) return;
+    const line = (done, text, href, linkText, tail) =>
+      Global.el("li", {}, [
+        Global.el("span", { class: done ? "step-done" : "step-optional", text: done ? "done" : "to do" }),
+        document.createTextNode(" "),
+        done ? document.createTextNode(text) : document.createTextNode(`${text} `),
+        done ? document.createTextNode("") : Global.el("a", { href, text: linkText }),
+        done ? document.createTextNode("") : document.createTextNode(tail || ""),
+      ]);
+    document.getElementById("getting-started-list").replaceChildren(
+      line(haveResume, "Save your resume.", "/build.html", "Build my resume", " reads your LinkedIn data and old resumes and writes a first draft to check."),
+      line(haveKey, "Add your Anthropic key.", "/build.html", "Step 1 of Build my resume", " explains how to get one (about five minutes, once).")
+    );
+  } catch (err) {
+    box.classList.add("hidden"); // the page's own requests will say what is wrong
+  }
+}
+
+// A banner when the extension on one of the person's computers reported an older version than the one posted on the install page. The extension reports its
+// version each time it sends something, so a computer that has not used it since the update shows nothing until it does.
+async function checkExtensionUpdate() {
+  try {
+    const rows = await Global.fetchJSON(TOKENS_API);
+    const behind = rows.filter((t) => t.update_available);
+    const host = document.getElementById("extension-update");
+    host.classList.toggle("hidden", behind.length === 0);
+    if (!behind.length) return;
+    const names = behind.map((t) => `${t.name} (${t.extension_version})`).join(", ");
+    host.replaceChildren(
+      document.createTextNode(`A newer version of the Chrome extension is available (${behind[0].extension_latest}). Still on an older one: ${names}. `),
+      Global.el("a", { href: "/extension.html", text: "Get the new version and how to update." })
+    );
+  } catch (err) {
+    /* just no banner */
   }
 }
 
@@ -599,5 +646,7 @@ async function start() {
   }
   Global.iconifyButtons && Global.iconifyButtons(document.body);
   load();
+  checkExtensionUpdate();
+  checkGettingStarted();
 }
 start();

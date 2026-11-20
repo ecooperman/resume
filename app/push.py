@@ -24,7 +24,7 @@ from shared_python import owned
 from shared_python.accounts_gate import Account
 from sqlalchemy.orm import Session
 
-from . import access, apikeys, config, crud, scoring
+from . import access, apikeys, config, crud, extension, scoring
 from .database import SessionLocal
 from .deps import get_db
 
@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 PREFIX = "/api/push/"
 CORS = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, content-type",
+    "Access-Control-Allow-Headers": "authorization, content-type, x-extension-version",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Max-Age": "600",
 }
@@ -46,9 +46,15 @@ def _bearer(request: Request) -> str:
     return value[7:].strip() if value[:7].lower() == "bearer " else ""
 
 
-def _account_for_token(raw: str) -> Optional[Account]:
+def _version(request: Request) -> Optional[str]:
+    """The extension's own version, if it said (only plain dotted numbers are kept: it is a request header)."""
+    value = request.headers.get("x-extension-version", "").strip()
+    return value if extension.parse_version(value) else None
+
+
+def _account_for_token(raw: str, version: Optional[str] = None) -> Optional[Account]:
     with owned.unscoped(), SessionLocal() as db:
-        user = crud.user_for_token(db, raw)
+        user = crud.user_for_token(db, raw, version)
         email = user.email if user is not None else None
     if email is None:
         return None
@@ -64,7 +70,8 @@ def _no(status: int, detail: str) -> JSONResponse:
 async def token_only(request: Request, call_next):
     if request.method == "OPTIONS":
         return Response(status_code=204, headers=CORS)
-    account = await run_in_threadpool(_account_for_token, _bearer(request))
+    account = await run_in_threadpool(_account_for_token, _bearer(request), _version(request))
+    request.state.extension_version = _version(request)
     if account is None:
         return _no(401, "That token isn't valid. Make a new one on the Jobs page, or check it was copied whole.")
     if request.method == "POST":
@@ -86,9 +93,9 @@ def _account(request: Request) -> Account:
 
 
 @app.get(PREFIX + "ping")
-def ping(account: Account = Depends(_account)):
-    """Lets the extension check a token and say whose Jobs it is connected to."""
-    return {"ok": True, "email": account.email}
+def ping(request: Request, account: Account = Depends(_account)):
+    """Lets the extension check a token and say whose Jobs it is connected to, and whether a newer version of the extension is out."""
+    return {"ok": True, "email": account.email, "extension": extension.update_info(request.state.extension_version)}
 
 
 class PushedJob(BaseModel):
@@ -112,7 +119,7 @@ class PushIn(BaseModel):
 
 
 @app.post(PREFIX + "jobs")
-def push_jobs(body: PushIn, account: Account = Depends(_account), db: Session = Depends(get_db)):
+def push_jobs(request: Request, body: PushIn, account: Account = Depends(_account), db: Session = Depends(get_db)):
     """Save the postings, and queue the ones with a description and no score for scoring. Safe to send the same posting again: it is
     matched by link and only ever fills in what was missing."""
     if len(body.jobs) > config.MAX_PUSH_ITEMS:
@@ -130,6 +137,7 @@ def push_jobs(body: PushIn, account: Account = Depends(_account), db: Session = 
         else:
             out["queued"] = scoring.enqueue(account, to_score)
     out["scoring"] = scoring.status(account.id)
+    out["extension"] = extension.update_info(request.state.extension_version)
     return out
 
 

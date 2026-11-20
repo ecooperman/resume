@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import crud, models
+from . import crud, extension, models
 from .deps import get_db
 
 router = APIRouter(prefix="/api/tokens", tags=["tokens"])
@@ -18,7 +18,9 @@ class TokenIn(BaseModel):
 
 def _out(row: models.PushToken) -> dict:
     iso = lambda d: d.isoformat() + "Z" if d else None  # stored as naive UTC
-    return {"id": row.id, "name": row.name, "prefix": row.prefix, "created_at": iso(row.created_at), "last_used_at": iso(row.last_used_at)}
+    info = extension.update_info(row.extension_version)
+    return {"id": row.id, "name": row.name, "prefix": row.prefix, "created_at": iso(row.created_at), "last_used_at": iso(row.last_used_at),
+            "extension_version": row.extension_version, "extension_latest": info["latest"], "update_available": info["update_available"]}
 
 
 @router.get("")

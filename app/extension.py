@@ -31,6 +31,26 @@ def newest() -> Optional[Tuple[str, Path]]:
     return version, path
 
 
+_VERSION = re.compile(r"^\d+(?:\.\d+){0,3}$")
+
+
+def parse_version(text) -> Optional[Tuple[int, ...]]:
+    """A version such as "0.10.0" as numbers that compare properly (0.10.0 is newer than 0.9.0), or None for anything else. The text may come from a request header,
+    so only plain dotted numbers are accepted."""
+    if not isinstance(text, str) or len(text) > 20 or not _VERSION.match(text.strip()):
+        return None
+    return tuple(int(part) for part in text.strip().split("."))
+
+
+def update_info(installed: Optional[str]) -> dict:
+    """What an extension (or the Jobs page) is told about updates: the newest version posted, and whether the installed one is older. `installed` is
+    what the extension reported about itself (None: it did not say, so no claim is made that it is out of date)."""
+    got = newest()
+    latest = got[0] if got else None
+    have = parse_version(installed)
+    return {"latest": latest, "update_available": bool(latest and have and have < parse_version(latest)), "page": "/extension.html"}
+
+
 @router.get("/api/extension")
 def extension_info():
     """What the install page shows: whether there is a download, its version and size."""

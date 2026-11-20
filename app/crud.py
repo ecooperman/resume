@@ -504,16 +504,19 @@ def delete_token(db: Session, token_id: int) -> bool:
     return True
 
 
-def user_for_token(db: Session, raw: str) -> Optional[models.User]:
+def user_for_token(db: Session, raw: str, extension_version: Optional[str] = None) -> Optional[models.User]:
     """Whose token this is, or None. Must run inside owned.unscoped() (it is the lookup that decides who the scope is). Notes when it was
-    last used, at most once a minute so a burst of pushes is not a burst of writes."""
+    last used, at most once a minute so a burst of pushes is not a burst of writes, and which extension version it said it was (only when that changed)."""
     if not raw or not raw.startswith(config.PUSH_TOKEN_PREFIX):
         return None
     row = db.query(models.PushToken).filter(models.PushToken.token_hash == hash_token(raw)).first()
     if row is None:
         return None
     now = datetime.utcnow()
-    if row.last_used_at is None or now - row.last_used_at > timedelta(minutes=1):
+    changed = bool(extension_version) and extension_version != row.extension_version
+    if changed:
+        row.extension_version = extension_version
+    if changed or row.last_used_at is None or now - row.last_used_at > timedelta(minutes=1):
         row.last_used_at = now
         db.commit()
     return db.query(models.User).filter(models.User.id == row.owner_id).first()

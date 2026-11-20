@@ -59,6 +59,11 @@ lets people in on the Users page or the dashboard's People page), every resume a
   the tailored resume and letter, dates). A job whose link is already here (for example from the extension's CSV) is never overwritten: only what it has nothing for is filled in, and
   `applied` is kept if either side had it, so it is safe to run twice. A job's time-management label becomes the resume it is tailored from, through the `resume_person_slug` on that label
   (a label with none, or a slug that is not one of this person's resumes here, leaves the job on their default resume and is reported). One person's jobs only: it needs an account here.
+- **Extension update notice** (`app/extension.py` `update_info`, `push_tokens.extension_version`; extension 0.3.0 onward): every call the extension makes carries `X-Extension-Version` (allowed by the push door's CORS). The door
+  keeps that version on the token (only plain dotted numbers; anything else is ignored) and answers `ping` and `jobs` with `extension: {latest, update_available, page}`, `latest` being the newest zip in `extension/`.
+  The extension stores that answer and shows a yellow "a newer version is available" notice in its popup and options page (comparing with its own version when it opens, so the notice clears as soon as it is updated);
+  the Jobs page shows a banner when any of the person's tokens last reported an older version, and the token list shows each one's version. An extension that sends no version (0.2.0 and earlier) is never claimed to be
+  out of date, so people still on 0.2.0 learn of 0.3.0 only by being told once: from 0.3.0 on, updates announce themselves.
 - **Pushing jobs from the Chrome extension** (`app/push.py`, `app/tokens.py`, table `push_tokens`): a signed-in person makes a personal token on the Jobs page ("Connect the Chrome
   extension"; shown once, only its SHA-256 kept, up to 10, removing one revokes it). The extension sends `Authorization: Bearer <token>` to `POST /api/push/jobs`
   (`{jobs: [{url, title, company, salary, jd_text, optionally tier/summary/matched/gaps/strengths}], person_id?, score?}`, up to 200 postings and 12 MB) and `GET /api/push/ping`

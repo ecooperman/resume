@@ -104,7 +104,8 @@ def test_removing_a_token_revokes_it_at_once(person, people):
     bob = person("bob@example.com")
     made = make_token(bob)
     ext = pusher(made["token"])
-    assert ext.get("/api/push/ping").json() == {"ok": True, "email": "bob@example.com"}
+    got = ext.get("/api/push/ping").json()
+    assert got["ok"] is True and got["email"] == "bob@example.com"
     assert bob.delete(f"/api/tokens/{made['id']}").status_code == 200
     assert ext.get("/api/push/ping").status_code == 401
 

@@ -106,12 +106,16 @@ function renderKey() {
     } else if (keyStatus.using_house_key) {
       parts.push(el("p", { class: "hint", text: "As an administrator you can use the server's key, so you can skip this. Add your own if you'd rather the cost went to your account." }));
     } else {
+      const consoleLink = (text) => el("a", { href: keyStatus.get_url || "https://console.anthropic.com/settings/keys", target: "_blank", rel: "noopener noreferrer", text });
       parts.push(
-        el("p", { class: "hint" }, [
-          document.createTextNode("Drafting uses Anthropic's AI, billed to your own account. "),
-          el("a", { href: keyStatus.get_url || "https://console.anthropic.com/settings/keys", target: "_blank", rel: "noopener noreferrer", text: "Create a key in the Anthropic console" }),
-          document.createTextNode(" (add a few dollars of credit first), then paste it here. It is saved encrypted and only you can use it."),
-        ])
+        el("p", { class: "hint", text: "The AI that writes your draft, scores jobs and tailors your resume is Anthropic's, and it is billed to your own Anthropic account, so you need a key from it. This takes about five minutes, once. A Claude chat subscription (Claude Pro or Max) is a different thing and does not include this." }),
+        el("ol", { class: "steps-list" }, [
+          el("li", {}, [consoleLink("Open the Anthropic Console"), document.createTextNode(" and sign up (or sign in). This is console.anthropic.com, not claude.ai.")]),
+          el("li", { text: "Add credit: in the Console go to Settings, then Billing, and buy a small amount of credit (the smallest, about $5, is plenty to start). Without credit the key is created but every run fails." }),
+          el("li", { text: "Go to Settings, then API keys, press Create key, give it any name (for example Resume app) and copy it. The Console shows the whole key only once, so paste it here straight away." }),
+          el("li", { text: "Paste it in the box below and press Save key. It is saved encrypted, only you can use it, and it is never shown again." }),
+        ]),
+        el("p", { class: "hint", text: "What it costs, roughly: a first resume draft 10 to 50 cents; scoring one job a few cents; a tailored resume and cover letter for one job a few tens of cents. You can see exactly what you have spent in the Anthropic Console, and set a spending limit there." })
       );
     }
     if (keyStatus.can_save === false) {

@@ -136,6 +136,7 @@ class PushToken(Base, owned.OwnedMixin):
     token_hash = Column(String, nullable=False, unique=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_used_at = Column(DateTime, nullable=True)
+    extension_version = Column(String, nullable=True)  # what the extension last said its version was, so the Jobs page can say an update is out
 
 
 class AccessCode(Base, owned.OwnedMixin):

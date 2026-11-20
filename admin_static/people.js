@@ -188,7 +188,11 @@ async function start() {
     document.querySelector(".app-header .subtitle").textContent = "Your resume lives here, private to you. Nobody else can see it, including the administrators.";
     document.getElementById("people-title").textContent = "Your resume";
     document.getElementById("show-add-person").textContent = "+ Add my resume";
-    document.getElementById("people-empty").textContent = "You haven't added your resume yet.";
+    document.getElementById("people-empty").replaceChildren(
+      document.createTextNode("You haven't added your resume yet. The easiest way to start is "),
+      Global.el("a", { href: "/build.html", text: "Build my resume" }),
+      document.createTextNode(" (in the menu on the left): it reads your LinkedIn data and any old resumes and writes a first draft for you to check. If you already have a resume.yaml, you can instead paste it with the button above.")
+    );
     document.getElementById("person-slug").required = false;
   }
   initAddPerson();

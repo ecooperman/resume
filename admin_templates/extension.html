@@ -20,6 +20,15 @@
     <div id="page-message" class="page-message hidden"></div>
 
     <section class="step">
+      <h2><span class="step-num" aria-hidden="true">0</span>What you need first</h2>
+      <ul class="plain-list">
+        <li>A computer with <strong>Chrome</strong> (or Edge or Brave, which are built on it). It does not work on a phone, or in Safari or Firefox.</li>
+        <li><strong>Your resume saved here, and your Anthropic key added.</strong> The extension only collects job postings; scoring them needs both. The <a href="/jobs.html">Jobs page</a> shows a "Before you start" box until they are done, and <a href="/build.html">Build my resume</a> walks you through both.</li>
+        <li>About ten minutes. You do this once per computer.</li>
+      </ul>
+    </section>
+
+    <section class="step">
       <h2><span class="step-num" aria-hidden="true">1</span>Download it <span id="ext-version" class="step-optional"></span></h2>
       <div id="ext-download"></div>
     </section>
@@ -27,42 +36,72 @@
     <section class="step">
       <h2><span class="step-num" aria-hidden="true">2</span>Install it in Chrome</h2>
       <ol class="steps-list">
-        <li>Unzip the download. You get a folder with a file called <code>manifest.json</code> in it. <strong>Keep that folder somewhere permanent</strong> (Documents is fine): Chrome runs the extension from it, so deleting the folder removes the extension.</li>
-        <li>In Chrome, open <code>chrome://extensions</code> and turn on <strong>Developer mode</strong> (top right).</li>
-        <li>Press <strong>Load unpacked</strong> and choose the unzipped folder (the one that holds <code>manifest.json</code>, not a folder above it).</li>
-        <li>Click the puzzle-piece icon in Chrome's toolbar and pin <strong>Job Application Autofill</strong> so its button is always there.</li>
+        <li><strong>Unzip the download.</strong> On a Mac, double-click the file. On Windows, right-click it and choose <em>Extract All</em>, then <em>Extract</em>. You get a folder. Open it: you should see a file called <code>manifest.json</code> straight away. If you only see another folder, open that one instead.</li>
+        <li><strong>Move that folder somewhere permanent</strong>, such as Documents (not Downloads, which gets cleared out). Chrome runs the extension from that folder, so if you delete or move the folder the extension stops working.</li>
+        <li>In Chrome, type <code>chrome://extensions</code> in the address bar and press Enter. Turn on <strong>Developer mode</strong> with the switch at the top right.</li>
+        <li>Press <strong>Load unpacked</strong> (top left) and choose the folder that holds <code>manifest.json</code>. The extension, <em>Job Application Autofill</em>, now appears in the list.</li>
+        <li>Click the <strong>puzzle-piece icon</strong> at the top right of Chrome, find <em>Job Application Autofill</em> and click the pin beside it, so its button stays in the toolbar.</li>
       </ol>
-      <p class="hint">It is Chrome (or a browser built on it, such as Edge or Brave). Because it is installed from a folder rather than the Chrome Web Store, Chrome may remind you at start-up that you have a developer-mode extension; you can dismiss that.</p>
+      <p class="hint">Because it is installed from a folder rather than the Chrome Web Store, Chrome may remind you at start-up that you have a developer-mode extension. That is expected; dismiss it.</p>
     </section>
 
     <section class="step">
       <h2><span class="step-num" aria-hidden="true">3</span>Connect it to your Jobs</h2>
+      <p class="hint"><strong>Do these in order, and do not skip the last one.</strong> Nothing you change on the extension's settings page counts until you press Save at the bottom.</p>
       <ol class="steps-list">
-        <li>On <a href="/jobs.html">the Jobs page</a>, press <strong>Connect the Chrome extension</strong>, name a token (for example the computer it is for), and copy the token and the address it shows you. The token is shown once.</li>
-        <li>In the extension's options (right-click its icon, then <em>Options</em>), find <strong>Send to Jobs</strong>. Paste the address and the token, and choose <em>Send to my Jobs app, which scores them</em>.</li>
-        <li>Press <strong>Test connection</strong>; it should say whose Jobs it is connected to. Then press <strong>Save profile</strong> at the bottom of the page.</li>
+        <li>On <a href="/jobs.html">the Jobs page</a>, press <strong>Connect the Chrome extension</strong>. Type a name for this computer (for example <em>Home laptop</em>) and press <strong>Make a token</strong>. Two boxes appear: the token and the address. <strong>The token is shown only once</strong>, so keep that page open, and copy each with its Copy button when you need it.</li>
+        <li>Open the extension's settings: right-click its icon in the toolbar and choose <strong>Options</strong>. (If you can't see the icon, use the puzzle-piece menu, then the three dots beside the extension, then Options.) A page opens with a <strong>Send to Jobs</strong> section partway down.</li>
+        <li>In that section, change the first box, <em>What "Score this job" and "Score all jobs on this page" do</em>, to <strong>Send to my Jobs app, which scores them</strong>.</li>
+        <li>Paste the address into <em>Jobs app address</em> and the token into <em>Jobs app token</em> (the token starts with <code>rjt_</code>; paste all of it).</li>
+        <li>Press <strong>Test connection</strong>. It should say <em>Connected: this sends to (your email)'s Jobs.</em> If it says anything else, see "If something goes wrong" below.</li>
+        <li><strong>Scroll to the bottom and press Save profile.</strong> It briefly says <em>Saved.</em></li>
+        <li>Check it worked: click the extension's icon. The buttons should now read <strong>Send this job to Jobs</strong> (and, on a LinkedIn list page, <strong>Send all jobs on this page to Jobs</strong>). If they still say "Score this job", step 3 or step 6 did not stick: go back and repeat them.</li>
       </ol>
-      <p class="hint">The token only lets the extension add jobs to your list. It cannot read anything of yours or sign in as you, and you can remove it on the Jobs page whenever you like, which cuts that computer off at once. The scoring uses your own Anthropic key (or the system key, if the administrator has allowed it for you), set up under <a href="/build.html">Build my resume</a>.</p>
+      <p class="hint">The token only lets the extension add jobs to your list. It cannot read anything of yours or sign in as you, and you can remove it on the Jobs page whenever you like, which cuts that computer off at once. Use one token per computer.</p>
     </section>
 
     <section class="step">
-      <h2><span class="step-num" aria-hidden="true">4</span>Use it</h2>
+      <h2><span class="step-num" aria-hidden="true">4</span>Use it: send your first job</h2>
+      <ol class="steps-list">
+        <li>Open a job posting in Chrome: the posting's own page, with its description showing (on LinkedIn, click a job so its details are on screen; if the description is cut off with a <em>show more</em> link, press it first).</li>
+        <li>Click the extension's icon and press <strong>Send this job to Jobs</strong>. The popup says <em>Done - check the page for the result</em>, and a small notice appears on the posting's page saying <em>Added to your Jobs list.</em> (or <em>Already in your Jobs list.</em> if you sent it before).</li>
+        <li>Open <a href="/jobs.html">the Jobs page</a> (refresh it if it was already open). The job is there. It says <em>Unscored</em> for the first few seconds and then gets its fit rating (Strong, Good, Possible, Weak or Unclear), about 15 seconds each. You do not need to wait: carry on browsing and send the next one.</li>
+        <li>Click the job's row to open it: you will see why it got that rating, what matches and what is missing. From there <strong>Make a resume and cover letter for this job</strong> writes a copy of your resume reworded for the posting, with a letter, ready to download as PDF or Word. Read them before you send them: they are written by an AI.</li>
+      </ol>
       <ul class="plain-list">
-        <li><strong>Send this job to Jobs</strong> works on any job posting page: it reads the page you are looking at and sends its text, title and link here.</li>
-        <li><strong>Send all jobs on this page to Jobs</strong> appears on LinkedIn's job search results and on your saved-jobs page, and sends each posting in the list.</li>
-        <li>Each job lands on your Jobs page and is scored in the background, so you can carry on browsing. Sending the same job twice is harmless: it is matched by its link and never overwrites your notes or its score.</li>
+        <li><strong>Send all jobs on this page to Jobs</strong> only appears on LinkedIn's job search results and your saved-jobs page, and sends every posting in the list.</li>
+        <li>Sending the same job twice is harmless: it is matched by its link and never overwrites your notes, your "applied" mark or its score.</li>
       </ul>
       <div class="notice">
         <strong>Be careful with the list button on LinkedIn.</strong> LinkedIn's terms do not allow automated reading of its pages, and "Send all jobs on this page" clicks through postings (or opens each saved job) for you. LinkedIn may restrict an account it thinks is doing that, and the account at risk is yours, not ours. Sending <em>one page at a time</em> with <em>Send this job to Jobs</em>, while you are looking at it, is the safest way to use it.
       </div>
+      <div class="notice">
+        <strong>What it costs.</strong> Each job scored uses your Anthropic key: roughly a few cents a job, so sending a list of 50 is a few dollars. A tailored resume and cover letter is a few tens of cents each. See exactly what you have spent, and set a spending limit, in the <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer">Anthropic Console</a>.
+      </div>
+    </section>
+
+    <section class="step">
+      <h2><span class="step-num" aria-hidden="true">5</span>If something goes wrong</h2>
+      <ul class="plain-list">
+        <li><strong>The button still says "Score this job".</strong> The mode was not saved. Open Options, set the first box in Send to Jobs to <em>Send to my Jobs app, which scores them</em>, press <strong>Save profile</strong> at the bottom, then close and reopen the extension's popup.</li>
+        <li><strong>"Add your Jobs app address and token in the extension options first".</strong> They are empty or were not saved. Fill them in and press Save profile.</li>
+        <li><strong>"Couldn't reach the Jobs app".</strong> Check the address: it should start with <code>https://</code>, be exactly the one the Jobs page showed, and have nothing after the <code>.com</code>. Check your internet connection and try again in a minute. If it keeps happening on a good connection, tell whoever invited you.</li>
+        <li><strong>"The Jobs app didn't accept the token".</strong> The token was copied incompletely or was removed. Make a new one on the Jobs page (press <em>Connect the Chrome extension</em> again), paste all of it, and Save profile.</li>
+        <li><strong>"Couldn't find any job description text on this page".</strong> You are on a list or a page without a posting. Open the job itself, let the page finish loading, expand any <em>show more</em>, and try again.</li>
+        <li><strong>The job arrived but stays "Unscored".</strong> Scoring needs your saved resume and your Anthropic key (with credit on it). The "Before you start" box on the Jobs page says what is missing; once fixed, press <strong>Score the jobs with no score yet</strong> on that page.</li>
+        <li><strong>"Send all jobs on this page" is missing.</strong> It only shows on LinkedIn's job search results and saved-jobs pages.</li>
+        <li><strong>The extension disappeared, or shows an error, at <code>chrome://extensions</code>.</strong> You moved or deleted its folder. Put the folder back, or repeat step 2 and then step 3 (use the same token, or make a new one).</li>
+      </ul>
     </section>
 
     <section class="step">
       <h2><span class="step-num" aria-hidden="true">i</span>What it can see, and updating it</h2>
       <ul class="plain-list">
-        <li>It does nothing until you press one of its buttons, and then it reads only that page (or, for the list buttons, the postings in the list). What it sends here is each posting's text, title, company and link, over a secure connection, with your token.</li>
-        <li>Your profile and token are stored only in your own browser.</li>
-        <li><strong>To update:</strong> when a newer version is posted here, download it, unzip it over the old folder (replacing the files), then press the circular arrow on the extension's card at <code>chrome://extensions</code>. Your settings are kept.</li>
+        <li>It does nothing until you press one of its buttons, and then it reads only that page (or, for the list buttons, the postings in the list). What it sends here is each posting's text, title, company and link, over a secure connection, with your token. It also tells this site which version it is.</li>
+        <li>Your settings and token are stored only in your own browser.</li>
+        <li><strong>Updating.</strong> When a newer version is posted, a yellow notice appears when you open the extension's popup or Options, and a banner appears at the top of your Jobs page. To update: download the new zip from this page and unzip it. <strong>Copy everything from the new folder into your existing extension folder, replacing the old files</strong> (do not make a second folder). Then open <code>chrome://extensions</code> and press the circular arrow on the extension's card. The version number on the card now matches, and your settings are kept.</li>
+        <li><strong>If you load it from a different folder, Chrome treats it as a brand-new extension</strong> and forgets your settings; you would repeat step 3 (the same token still works).</li>
+        <li><strong>Removing it.</strong> Press <em>Remove</em> on its card at <code>chrome://extensions</code>, and remove its token on the Jobs page.</li>
       </ul>
     </section>
   </main>

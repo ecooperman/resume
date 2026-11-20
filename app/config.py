@@ -33,6 +33,16 @@ ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").sp
 if ENV != "production":
     ADMIN_EMAILS.add(DEV_USER_EMAIL)
 
+# app/server.py runs BOTH sites in one process and tells them apart by the Host header: these hostnames (comma-separated, lowercase, no port)
+# get the signed-in admin app, everything else gets the public site. The second one is for the other apps' calls on this machine
+# (the dashboard and time-management reach the admin app at http://resume-admin.localhost:8040); locally it also lets one
+# `uvicorn app.server:app` serve both at localhost:8040 (public) and resume-admin.localhost:8040 (admin).
+ADMIN_HOSTS = {h.strip().lower() for h in os.environ.get("RESUME_ADMIN_HOSTS", "resume-admin.evancooperman.com,resume-admin.localhost").split(",") if h.strip()}
+
+# How many different people an ordinary account may ask to have let in (administrators: no limit). Each email counts once, whatever
+# became of the request, until the person withdraws one still waiting, so being refused does not hand the slot back.
+INVITES_PER_USER = int(os.environ.get("INVITES_PER_USER", "5"))
+
 # Where emails send people to sign in and where the public site lives.
 ADMIN_PUBLIC_URL = "https://resume-admin.evancooperman.com" if ENV == "production" else f"http://127.0.0.1:{PORT_ADMIN}"
 PUBLIC_SITE_URL = "https://resume.evancooperman.com" if ENV == "production" else f"http://127.0.0.1:{PORT}"

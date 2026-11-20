@@ -70,4 +70,6 @@ jobs:
             alembic upgrade head
             python build.py
             sudo systemctl restart resume
-            sudo systemctl restart resume-admin
+            # The admin app runs inside "resume" now (app/server.py). Until the old unit is gone from the droplet this restarts it too;
+            # after, there is nothing to restart and that is fine.
+            sudo systemctl restart resume-admin || echo "resume-admin is not a separate service any more (see DEPLOYMENT.md)"

@@ -11,7 +11,8 @@ build.py                 <- every person's resume data -> site/{public,private}/
 app/
   render.py                <- the actual rendering pipeline (build.py and app/admin.py both use it)
   main.py                 <- public resume app (port 8040): serves public/<slug>/ or private/<slug>/
-  admin.py                 <- admin API (port 8041, separate process - see "Access codes" below)
+  admin.py                 <- admin API and pages (the signed-in app; see "Access codes" below)
+  server.py                <- one process for both: hands each request to main.py or admin.py by its Host header (port 8040)
   models.py, crud.py      <- access_codes, people, accounts and the builder's tables (SQLAlchemy)
   generate.py, builder.py <- the resume builder: reading uploads, the Claude call, stored files/engagements/notes/draft
   apikeys.py, limits.py   <- each person's own Anthropic key (encrypted) and the drafts-per-hour allowance
@@ -23,10 +24,17 @@ migrations/                <- Alembic, same pattern as the other apps here
 
 ## Accounts (several people, each with a private resume)
 
-The admin app (`app/admin.py`, port 8041) has accounts, like plans, time and finances: default-deny (signing in is not enough; an administrator
+The admin app (`app/admin.py`) has accounts, like plans, time and finances: default-deny (signing in is not enough; an administrator
 lets people in on the Users page or the dashboard's People page), every resume and access code is owned by one account and filtered to it below the routes
 (`shared_python.owned`), and `shared_python.accounts_gate` wraps the whole app. Administrators are `ADMIN_EMAILS`.
 
+- **Invites** (`app/invites.py`, the Invites page, the same behaviour as Lists and Trips): anyone with an account can ask for a friend to be let in (up to
+  `INVITES_PER_USER` different people, default 5; each email counts once whatever became of the request, until a waiting one is withdrawn); an
+  administrator approves or declines each (an approved person gets an account and an email, nothing else; this app is behind the dashboard sign-in, so
+  nothing is added to Cloudflare) and can allow a declined one again; an administrator's own requests are approved at once and have no limit. A person sees only
+  their own requests, the queue is administrators-only, and a resume stays private whoever invited whom. The administrator is told of each request through
+  the usual `notify` channels (the periodic digest). `/api/me` carries `invites_left` and, for administrators, `pending_invites` (the sidebar badge). The panel is
+  the shared `app-invites.js`; the administrator's queue is `admin_static/invites.js`. A removed person's requests go with their data.
 - **An ordinary account** has exactly one resume, with a slug nobody chooses (`u<id>-<random>`), never the site's default, never published. It can edit it,
   download a PDF or Word copy (rendered on the spot, with everything in it), and delete it. It cannot see anyone else's, and neither can an administrator.
 - **An administrator** can have several resumes, choose slugs, set the default, publish and un-publish, create access codes, and use the server's Anthropic key
@@ -206,15 +214,18 @@ behind the dashboard sign-in like the other apps. Pick who a
 new code is for, create it, copy the shareable link, and revoke, all from
 the browser - no SSH needed.
 
-It's a genuinely separate FastAPI app/process/port from the public resume
-(`app/admin.py`, port 8041), not just a different route on the same app.
-That's deliberate: `resume.evancooperman.com` is intentionally
-Cloudflare-Access-**Bypassed** so the public/redacted page loads with no
-login. If the admin routes lived on that same app/port, they'd be reachable
-un-authenticated too - Cloudflare's per-hostname policy doesn't stop a
-request once it's already reached your origin. Putting admin on its own
-port means there's no route from the public hostname to it at all; the
-isolation is structural, not app logic that has to stay correct forever.
+It's a genuinely separate FastAPI **app** from the public resume (`app/admin.py`, with its own routes, middleware and sign-in gate), served in
+the same **process** as the public one (`app/server.py`) and told apart by the `Host` header. That used to be two services (ports 8040 and 8041);
+it is one now, because two of everything to run, restart and deploy bought nothing the hostname split does not already give.
+
+The split that matters is the hostnames: `resume.evancooperman.com` is intentionally sign-in-free (Cloudflare-Access-**Bypassed**, so the
+public/redacted page loads for strangers), and `resume-admin.evancooperman.com` is gated by the app itself (the dashboard sign-in plus an account
+here). Two hostnames keep Cloudflare's per-hostname rules (Bypass, cache) simple, and the two apps share nothing that a request on one could use
+to reach the other: a request goes to the admin app only if its `Host` is one of `RESUME_ADMIN_HOSTS` (default `resume-admin.evancooperman.com`
+and `resume-admin.localhost`, the latter for the other apps' calls on the droplet); anything else, including an unknown host, goes to the public
+app, which has no sign-in-only routes at all. This replaces the old structural guarantee (admin on a port with no tunnel route from the public
+hostname) with one in code, so `tests/test_server.py` pins it: every admin-only route is swept on a public host and must not answer, and a
+signed-out request on the admin host is still refused. Even a forged `Host: resume-admin...` only reaches the admin app's own gate (default-deny).
 
 **CLI alternative** - same underlying `access.db`, useful for scripting or
 if you're already SSHed in. Run from `/opt/apps/resume` on the droplet with
@@ -285,8 +296,8 @@ against another process on the same droplet, not the primary access control.
 **Must be set to the exact same value as `INTERNAL_API_TOKEN` on the
 `time-management` app** - see that app's README. Locally, export it in your
 shell before running `uvicorn app.admin:app`; on the droplet, set it in
-`/etc/systemd/system/resume-admin.service` (never commit the real value -
-see `deploy/resume-admin.service` for the placeholder line).
+`/etc/systemd/system/resume.service` (never commit the real value -
+see `deploy/resume.service` for the placeholder line).
 
 `app/admin.py` also serves the builder's routes; see "The builder" above.
 
@@ -304,15 +315,17 @@ uvicorn app.main:app --reload --port 8040
 
 Then open http://localhost:8040. To also run the admin panel locally:
 `uvicorn app.admin:app --reload --port 8041` in another terminal, then open
-http://localhost:8041.
+http://localhost:8041. Or run both as one process, as on the droplet:
+`uvicorn app.server:app --reload --port 8040`, then open http://localhost:8040 (the public site)
+and http://resume-admin.localhost:8040 (the admin app; browsers send `*.localhost` to your own machine).
 
 ## Deploying updates
 
 Push to `main` - `.github/workflows/deploy.yml` pulls, reinstalls
 dependencies, runs `alembic upgrade head` (real migrations against the
 live `access.db`, same as the DB-backed apps in this directory - see
-`../DEPLOYMENT.md`), rebuilds both trees, and restarts **both** services
-(`resume` and `resume-admin`). Access codes you've already created aren't
+`../DEPLOYMENT.md`), rebuilds both trees, and restarts the `resume` service (it serves both
+sites; the old separate `resume-admin` unit is gone, see `../DEPLOYMENT.md`). Access codes you've already created aren't
 touched by any of this.
 
 ## One-time droplet setup
@@ -373,26 +386,24 @@ for the second service.
    `playwright install chromium` (cache hit, no root needed) before
    `python build.py`, already in `.github/workflows/deploy.yml`.
 
-5. **systemd units** - set the real `INTERNAL_API_TOKEN` value in
-   `resume-admin.service` before installing it (matching whatever you set on
+5. **systemd unit** - set the real `INTERNAL_API_TOKEN` value in
+   `resume.service` before installing it (matching whatever you set on
    `time-management.service` - see that repo's one-time setup), then:
    ```bash
    sudo cp /opt/apps/resume/deploy/resume.service /etc/systemd/system/
-   sudo cp /opt/apps/resume/deploy/resume-admin.service /etc/systemd/system/
    sudo systemctl daemon-reload
    sudo systemctl enable --now resume
-   sudo systemctl enable --now resume-admin
-   curl -m 5 http://127.0.0.1:8040   # sanity check before wiring up the tunnel
-   curl -m 5 http://127.0.0.1:8041/api/codes   # (admin) should return []
+   curl -m 5 http://127.0.0.1:8040   # the public site, sanity check before wiring up the tunnel
+   curl -m 5 -H 'Host: resume-admin.evancooperman.com' http://127.0.0.1:8040/api/codes   # the admin app: refused (302/401/403) without a sign-in
    ```
 
 6. **cloudflared ingress** - add both to `/etc/cloudflared/config.yml`,
-   *above* the catch-all `- service: http_status:404` line:
+   *above* the catch-all `- service: http_status:404` line (both go to the same port: the app tells them apart by hostname):
    ```yaml
      - hostname: resume.evancooperman.com
        service: http://localhost:8040
      - hostname: resume-admin.evancooperman.com
-       service: http://localhost:8041
+       service: http://localhost:8040
    ```
    Route DNS and restart (skip `route dns` for either hostname if it
    already has a record pointing somewhere else - update it in the

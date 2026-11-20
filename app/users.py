@@ -2,7 +2,6 @@
 
 Only administrators may use any of this (and only administrators can invite). Everyone's resume stays completely private to them
 either way: an administrator cannot read another person's resume through this app, only manage who has an account."""
-import re
 import shutil
 from typing import Literal
 
@@ -16,9 +15,6 @@ from . import config, crud, models, notify
 from .deps import get_db
 
 router = APIRouter(prefix="/api/users", tags=["users"], dependencies=[Depends(accounts_gate.require_admin)])
-
-_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
 
 class UserOut(BaseModel):
     id: int
@@ -61,7 +57,7 @@ def add_user(
     notify_them: bool = Query(True, alias="notify"),
 ):
     email = crud.normalize_email(body.email)
-    if not _EMAIL.match(email) or email == crud.LEGACY_OWNER_EMAIL:
+    if not crud.valid_email(email):
         raise HTTPException(status_code=400, detail="That doesn't look like an email address")
     user, changed = crud.add_user(db, email)
     if changed and notify_them:  # a new person, or a removed one restored: tell them (the dashboard's People page sends one email for all the apps instead)

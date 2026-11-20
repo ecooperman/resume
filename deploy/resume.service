@@ -1,5 +1,5 @@
 [Unit]
-Description=Resume
+Description=Resume (the public site and the admin app, one process: app/server.py)
 After=network.target
 
 [Service]
@@ -10,7 +10,18 @@ WorkingDirectory=/opt/apps/resume
 # DEPLOYMENT.md's "Shared secrets" step. The leading "-" means a missing
 # file isn't an error, so an app that doesn't use any of them still starts.
 EnvironmentFile=-/etc/personal-apps/shared.env
-ExecStart=/opt/apps/resume/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8040
+# INTERNAL_API_TOKEN gates the /api/resume-data and /api/render endpoints
+# time-management's resume-generation feature calls (the admin half of this
+# process; the public half never reads it) - set the real value here
+# directly on the droplet (never commit it): sudo systemctl edit resume, or
+# edit this file in place after copying it in. Must match the value set on
+# time-management.service.
+Environment=INTERNAL_API_TOKEN=
+# One process serves both sites and tells them apart by the Host header
+# (RESUME_ADMIN_HOSTS, default resume-admin.evancooperman.com and
+# resume-admin.localhost; everything else is the public site). This was two
+# services, resume on 8040 and resume-admin on 8041.
+ExecStart=/opt/apps/resume/venv/bin/uvicorn app.server:app --host 127.0.0.1 --port 8040
 Restart=on-failure
 RestartSec=3
 

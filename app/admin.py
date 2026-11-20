@@ -29,7 +29,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from . import access, apikeys, builder, config, crud, drafts, feedback, generate, limits, render, users
+from . import access, apikeys, builder, config, crud, drafts, feedback, generate, invites, limits, render, users
 from .database import SessionLocal
 from .deps import get_db
 
@@ -40,13 +40,20 @@ SITE_DIR = config.SITE_DIR
 app = FastAPI(title="Resume Admin")
 access.install(app)  # only people with an account get in, each inside their own private data (app/access.py)
 app.include_router(users.router)
+app.include_router(invites.router)
+app.include_router(invites.app_router)
 templates = Jinja2Templates(directory=str(ADMIN_TEMPLATES_DIR))
 
 
 @app.get("/api/me")
-def get_me(request: Request, account: Account = Depends(accounts_gate.current_account)):
-    """Who is signed in, for the page header and for hiding what only an administrator may use."""
-    return {"email": account.email, "is_admin": account.is_admin, "logout_url": oidc_login.logout_url(request)}
+def get_me(request: Request, account: Account = Depends(accounts_gate.current_account), db: Session = Depends(get_db)):
+    """Who is signed in, for the page header and for hiding what only an administrator may use. `invites_left` is how many more people
+    they may ask for (null = no limit), and an administrator also gets how many requests are waiting, for the sidebar badge."""
+    me = {"email": account.email, "is_admin": account.is_admin, "logout_url": oidc_login.logout_url(request),
+          "invites_left": crud.invites_left(db, account.id, account.is_admin)}
+    if account.is_admin:
+        me["pending_invites"] = crud.pending_invite_count(db)
+    return me
 
 
 def asset_v(name: str) -> str:
@@ -74,6 +81,7 @@ app.get("/", response_class=HTMLResponse)(_page("people.html"))
 app.get("/build.html", response_class=HTMLResponse)(_page("build.html"))
 app.get("/codes.html", response_class=HTMLResponse)(_page("codes.html", admin_only=True))
 app.get("/users.html", response_class=HTMLResponse)(_page("users.html", admin_only=True))
+app.get("/invites.html", response_class=HTMLResponse)(_page("invites.html"))
 
 
 # --- internal-only endpoints, for the time-management app's resume

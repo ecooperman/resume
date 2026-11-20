@@ -6,9 +6,10 @@ from typing import Optional
 import yaml
 from shared_python import owned
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, joinedload
 
-from . import models
+from . import config, models
 from .database import SessionLocal
 
 
@@ -246,6 +247,14 @@ def normalize_email(raw: str) -> str:
     return (raw or "").strip().lower()
 
 
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def valid_email(email: str) -> bool:
+    """An address that looks like one (already normalised); never the placeholder that holds the pre-accounts data."""
+    return bool(_EMAIL.match(email)) and email != LEGACY_OWNER_EMAIL
+
+
 def get_user_by_email(db: Session, email: str):
     return db.query(models.User).filter(func.lower(models.User.email) == normalize_email(email)).first()
 
@@ -292,6 +301,64 @@ def add_user(db: Session, email: str):
     return user, True
 
 
+# --- invites: asking for someone to be let in. A person asks, an administrator decides (app/invites.py).
+
+
+def invites_left(db: Session, user_id: int, is_admin: bool) -> Optional[int]:
+    """How many more people this person may ask for, or None for no limit (administrators). Each different email they have asked for
+    counts once, in any state, until they withdraw a waiting one: being refused does not hand the slot back to be spent again."""
+    if is_admin:
+        return None
+    used = db.query(func.count(models.Invite.id)).filter(models.Invite.invited_by_id == user_id).scalar()
+    return max(config.INVITES_PER_USER - used, 0)
+
+
+def create_invite(db: Session, inviter_id: int, is_admin: bool, email: str):
+    """(invite, None), or (None, "duplicate") if this email was ever asked for, or (None, "none_left")."""
+    if db.query(models.Invite).filter(models.Invite.email == email).first() is not None:
+        return None, "duplicate"
+    left = invites_left(db, inviter_id, is_admin)
+    if left is not None and left <= 0:
+        return None, "none_left"
+    invite = models.Invite(email=email, invited_by_id=inviter_id)
+    db.add(invite)
+    try:
+        db.commit()
+    except IntegrityError:  # the same request raced in twice
+        db.rollback()
+        return None, "duplicate"
+    db.refresh(invite)
+    return invite, None
+
+
+def get_invite(db: Session, invite_id: int):
+    return db.query(models.Invite).options(joinedload(models.Invite.invited_by)).filter(models.Invite.id == invite_id).first()
+
+
+def my_invites(db: Session, user_id: int):
+    return db.query(models.Invite).filter(models.Invite.invited_by_id == user_id).order_by(models.Invite.id).all()
+
+
+def invites_with_status(db: Session, status: str):
+    return db.query(models.Invite).options(joinedload(models.Invite.invited_by)).filter(models.Invite.status == status).order_by(models.Invite.id).all()
+
+
+def pending_invite_count(db: Session) -> int:
+    return db.query(func.count(models.Invite.id)).filter(models.Invite.status == models.INVITE_PENDING).scalar()
+
+
+def decide_invite(db: Session, invite, status: str):
+    invite.status = status
+    invite.decided_at = datetime.utcnow()
+    db.commit()
+    return invite
+
+
+def remove_invite(db: Session, invite) -> None:
+    db.delete(invite)
+    db.commit()
+
+
 def set_user_status(db: Session, user, status: str):
     user.status = status
     db.commit()
@@ -301,6 +368,7 @@ def set_user_status(db: Session, user, status: str):
 def delete_user_data(db: Session, user_id: int) -> dict:
     """Permanently delete everything a person owns. Runs inside THEIR scope (never anyone else's). Returns the counts and the
     slugs whose built site files the caller should remove."""
+    db.query(models.Invite).filter(models.Invite.invited_by_id == user_id).delete(synchronize_session=False)  # not owned: picked out by who asked
     with owned.scope(user_id):
         slugs = [slug for (slug,) in db.query(models.Person.slug).all()]
         codes = db.query(models.AccessCode).delete(synchronize_session=False)

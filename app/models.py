@@ -2,11 +2,16 @@ from datetime import datetime
 
 from shared_python import owned
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import relationship
 
 from .database import Base
 
 USER_ACTIVE = "active"
 USER_REMOVED = "removed"
+
+INVITE_PENDING = "pending"
+INVITE_APPROVED = "approved"
+INVITE_DECLINED = "declined"
 
 
 class User(Base):
@@ -20,6 +25,24 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     status = Column(String, nullable=False, default=USER_ACTIVE, server_default=USER_ACTIVE)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Invite(Base):
+    """A person's request to let someone who has no account yet into the app. An administrator approves it (the person gets an
+    account and an email) or declines it. One request per email, ever: a declined one stays on file (and counts against the asker)
+    until an administrator allows it again, which removes it. NOT owned (shared_python.owned): the administrator reads everyone's
+    in the queue, and each person's own are picked out by invited_by_id in crud."""
+
+    __tablename__ = "invites"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String, nullable=False, unique=True)  # lowercased
+    invited_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(String, nullable=False, default=INVITE_PENDING, server_default=INVITE_PENDING)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    decided_at = Column(DateTime, nullable=True)
+
+    invited_by = relationship("User")
 
 
 class Person(Base, owned.OwnedMixin):

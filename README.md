@@ -461,10 +461,28 @@ for the second service.
      block *everyone* - so it needs a `Bypass` policy (or its own Access
      application with a Bypass action) carved out in the Zero Trust
      dashboard, scoped to just this hostname.
-   - `resume-admin.evancooperman.com`: never add a Bypass for this one. It
+   - `resume-admin.evancooperman.com`: never Bypass the hostname as a whole. It
      is gated by the app itself (the dashboard sign-in plus an account here),
      whether or not the Cloudflare Access wildcard still sits in front of it;
      `../DEPLOYMENT.md` says where the cutover to the dashboard sign-in stands.
+     **The one exception is `/api/push/*`** (the Chrome extension's "Send to Jobs"
+     door): the extension is a browser extension, not a person, so it cannot
+     pass Cloudflare's login, and its cross-origin request with an
+     `Authorization` header gets a 403 on the preflight if Access is in front.
+     Make a separate self-hosted Access application for exactly
+     `resume-admin.evancooperman.com` + path `api/push/*`, one policy, action
+     **Bypass**, include **Everyone** (a specific application wins over the
+     wildcard; do not add the bypass to the shared one, which would open every
+     hostname in it). The app itself still refuses any request without a valid
+     push token, and a token only opens `/api/push/*`. Done 2026-11-20. A new
+     rule can take several minutes to reach every Cloudflare edge: if the
+     extension's Test connection flips between working and not, wait and retry.
+     Check it with `curl -i -X OPTIONS -H 'Origin: chrome-extension://x'
+     -H 'Access-Control-Request-Method: GET'
+     -H 'Access-Control-Request-Headers: authorization'
+     https://resume-admin.evancooperman.com/api/push/ping` (expect 204 with
+     `access-control-allow-origin: *`; a 403 or a 302 to cloudflareaccess.com
+     means the bypass is missing).
 
    Do the Bypass carve-out deliberately, on the specific hostname, not by
    loosening the wildcard app itself - so admin (and your other apps) stay

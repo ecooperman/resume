@@ -402,6 +402,9 @@ function render() {
   renderBulk();
   const host = document.getElementById("jobs");
   const shown = visibleJobs();
+  const count = document.getElementById("job-count");
+  count.textContent = `Showing ${shown.length} of ${jobs.length} job${jobs.length === 1 ? "" : "s"}`;
+  count.classList.toggle("hidden", jobs.length === 0);
   if (!jobs.length) {
     host.replaceChildren(Global.el("p", { class: "hint", text: "No jobs yet. Add one above, or import a CSV from the Chrome extension." }));
   } else if (!shown.length) {

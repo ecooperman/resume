@@ -64,6 +64,8 @@ def _months(value, today: date, late: bool = False) -> Optional[int]:
 
 
 def _first_word(bullet: str) -> str:
+    """The word a bullet starts with, after a leading "Client:" label (client bullets begin "Bungie: Built ..." or "Bungie: runs ...")."""
+    bullet = re.sub(r"^[^:]{1,60}:\s+", "", bullet)
     m = re.match(r"[^A-Za-z]*([A-Za-z]+)", bullet)
     return m.group(1).lower() if m else ""
 

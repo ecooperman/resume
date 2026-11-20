@@ -139,6 +139,14 @@ def test_a_past_job_written_in_present_tense_is_a_tip_but_a_current_job_is_not()
     assert not [t for t in tip_texts(fine) if "present tense" in t]  # past tense, and verbs spelled the same in both are never flagged
 
 
+def test_a_client_label_in_front_of_a_bullet_does_not_hide_its_tense():
+    labelled = jobs_yaml(("Acme", "Mar 2019", "Sep 2022", "['Bungie: Lead the store build for 3 regions', 'Trex: Built 4 components']", ""))
+    got = [t for t in tip_texts(labelled) if "present tense" in t]
+    assert got and "1 of its bullets is in present tense" in got[0]  # "Lead" after "Bungie:" is caught, "Built" is not
+    plain = jobs_yaml(("Acme", "Mar 2019", "Sep 2022", "['Bungie: Led the store build for 3 regions']", ""))
+    assert not [t for t in tip_texts(plain) if "present tense" in t]
+
+
 def test_overlapping_jobs_are_a_tip_but_a_handover_month_and_odd_date_formats_are_fine():
     overlap = jobs_yaml(("Acme", "Mar 2019", "Sep 2022", "['Led 3 teams']", ""), ("Globex", "June 2021", "2024", "['Led 4 teams']", ""))
     got = [t for t in tip_texts(overlap) if "overlaps" in t]

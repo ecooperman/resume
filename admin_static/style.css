@@ -418,3 +418,11 @@ textarea.yaml {
   color: var(--danger);
   font-weight: 500;
 }
+
+/* A disabled button has to LOOK disabled (the shared theme styles none): while the AI reviews a draft, or a draft is being written, or a save
+   is running, the button that started it is locked, and without this it looks exactly like one that was ignored. */
+.step button:disabled,
+#feedback-box button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}

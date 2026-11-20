@@ -21,6 +21,9 @@ class UserOut(BaseModel):
     email: str
     status: str
     is_admin: bool = False
+    system_key: bool = False  # may fall back to the server's Anthropic key when they have none of their own
+    runs_this_month: int = 0  # AI runs on the system key this calendar month (counts only, never any text)
+    cost_this_month: float = 0.0  # a dollar estimate of those runs (tokens times the model's list price)
 
 
 class UserAdd(BaseModel):
@@ -31,13 +34,20 @@ class UserStatus(BaseModel):
     status: Literal["active", "removed"]
 
 
-def _out(user: models.User) -> UserOut:
-    return UserOut(id=user.id, email=user.email, status=user.status, is_admin=user.email in config.ADMIN_EMAILS)
+class SystemKeyIn(BaseModel):
+    allowed: bool
+
+
+def _out(user: models.User, usage: dict = None) -> UserOut:
+    used = (usage or {}).get(user.id, {})
+    return UserOut(id=user.id, email=user.email, status=user.status, is_admin=user.email in config.ADMIN_EMAILS, system_key=bool(user.house_key),
+                   runs_this_month=used.get("runs", 0), cost_this_month=crud.estimated_cost(used.get("input_tokens", 0), used.get("output_tokens", 0)))
 
 
 @router.get("", response_model=list[UserOut])
 def list_users(db: Session = Depends(get_db)):
-    return [_out(u) for u in crud.list_users(db)]
+    usage = crud.house_usage_by_user(db)
+    return [_out(u, usage) for u in crud.list_users(db)]
 
 
 @router.get("/suggestions", response_model=list[dict])
@@ -72,6 +82,16 @@ def _target(db: Session, user_id: int, admin: Account) -> models.User:
     if user.email in config.ADMIN_EMAILS or user.id == admin.id:
         raise HTTPException(status_code=409, detail="An administrator's access can't be changed here")
     return user
+
+
+@router.put("/{user_id}/system-key", response_model=UserOut)
+def set_system_key(user_id: int, body: SystemKeyIn, db: Session = Depends(get_db), admin: Account = Depends(accounts_gate.require_admin)):
+    """Let this person fall back to the server's Anthropic key when they have no key of their own (or take that away). Their own key,
+    if they save one, is always used first. Never for an administrator (they already can)."""
+    user = _target(db, user_id, admin)
+    if user.status != models.USER_ACTIVE:
+        raise HTTPException(status_code=409, detail="Restore their access first")
+    return _out(crud.set_house_key(db, user, body.allowed), crud.house_usage_by_user(db))
 
 
 @router.patch("/{user_id}", response_model=UserOut)

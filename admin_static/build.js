@@ -99,7 +99,11 @@ function renderKey() {
     if (keyStatus.has_own_key) {
       parts.push(el("p", { class: "hint is-error", text: "A saved key couldn't be read (the server's secret changed). Paste it again." }));
     }
-    if (keyStatus.using_house_key) {
+    if (keyStatus.using_house_key && keyStatus.system_key) {
+      // Someone the administrator let fall back to the system key: say so plainly, and that their own key still takes over if they add one.
+      const limit = keyStatus.system_runs_limit ? ` You have ${keyStatus.system_runs_left} of ${keyStatus.system_runs_limit} AI runs left this month.` : "";
+      parts.push(el("p", { class: "hint", text: `The administrator is covering the AI cost for you for now, so you can skip this.${limit} Your text is still sent to Anthropic to write the draft. If you add your own key (a few dollars of credit on your own Anthropic account), it is used instead.` }));
+    } else if (keyStatus.using_house_key) {
       parts.push(el("p", { class: "hint", text: "As an administrator you can use the server's key, so you can skip this. Add your own if you'd rather the cost went to your account." }));
     } else {
       parts.push(

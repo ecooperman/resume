@@ -301,6 +301,47 @@ def add_user(db: Session, email: str):
     return user, True
 
 
+# --- the server's Anthropic key: who may use it, and what they have used (app/apikeys.py)
+
+
+def _month_start(now: Optional[datetime] = None) -> datetime:
+    now = now or datetime.utcnow()
+    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def set_house_key(db: Session, user, allowed: bool):
+    user.house_key = allowed
+    db.commit()
+    return user
+
+
+def house_uses_this_month(db: Session, user_id: int, now: Optional[datetime] = None) -> int:
+    return db.query(func.count(models.HouseKeyUse.id)).filter(models.HouseKeyUse.user_id == user_id, models.HouseKeyUse.at >= _month_start(now)).scalar()
+
+
+def record_house_use(db: Session, user_id: int, kind: str, tokens: Optional[list] = None) -> None:
+    """Count one run on the server's key. `tokens` is the list of (input, output) pairs the calls made (a draft can make two); None
+    or empty when no answer came back to read them from."""
+    pairs = [t for t in (tokens or []) if t]
+    db.add(models.HouseKeyUse(user_id=user_id, kind=kind, input_tokens=sum(i for i, _ in pairs) if pairs else None, output_tokens=sum(o for _, o in pairs) if pairs else None))
+    db.commit()
+
+
+def house_usage_by_user(db: Session, now: Optional[datetime] = None) -> dict:
+    """{user_id: {runs, input_tokens, output_tokens}} for this calendar month, for the Users page."""
+    rows = (
+        db.query(models.HouseKeyUse.user_id, func.count(models.HouseKeyUse.id), func.coalesce(func.sum(models.HouseKeyUse.input_tokens), 0), func.coalesce(func.sum(models.HouseKeyUse.output_tokens), 0))
+        .filter(models.HouseKeyUse.at >= _month_start(now))
+        .group_by(models.HouseKeyUse.user_id)
+        .all()
+    )
+    return {uid: {"runs": runs, "input_tokens": int(i), "output_tokens": int(o)} for uid, runs, i, o in rows}
+
+
+def estimated_cost(input_tokens: int, output_tokens: int) -> float:
+    return round((input_tokens * config.PRICE_INPUT_PER_MTOK + output_tokens * config.PRICE_OUTPUT_PER_MTOK) / 1_000_000, 2)
+
+
 # --- invites: asking for someone to be let in. A person asks, an administrator decides (app/invites.py).
 
 
@@ -369,6 +410,7 @@ def delete_user_data(db: Session, user_id: int) -> dict:
     """Permanently delete everything a person owns. Runs inside THEIR scope (never anyone else's). Returns the counts and the
     slugs whose built site files the caller should remove."""
     db.query(models.Invite).filter(models.Invite.invited_by_id == user_id).delete(synchronize_session=False)  # not owned: picked out by who asked
+    db.query(models.HouseKeyUse).filter(models.HouseKeyUse.user_id == user_id).delete(synchronize_session=False)
     with owned.scope(user_id):
         slugs = [slug for (slug,) in db.query(models.Person.slug).all()]
         codes = db.query(models.AccessCode).delete(synchronize_session=False)

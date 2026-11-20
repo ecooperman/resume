@@ -196,7 +196,7 @@ class ApiKeySaved(BaseModel):
 
 @app.get("/api/api-key")
 def api_key_status(account: Account = Depends(accounts_gate.current_account), db: Session = Depends(get_db)):
-    return apikeys.status(db, account.is_admin)
+    return apikeys.status(db, account)
 
 
 @app.put("/api/api-key", response_model=ApiKeySaved)
@@ -213,14 +213,14 @@ def save_api_key(body: ApiKeyIn, account: Account = Depends(accounts_gate.curren
     if verified is False:
         raise HTTPException(status_code=400, detail=why)
     apikeys.save(db, key)
-    return ApiKeySaved(status=apikeys.status(db, account.is_admin), verified=verified, note="" if verified else f"Saved, but not verified: {why}.")
+    return ApiKeySaved(status=apikeys.status(db, account), verified=verified, note="" if verified else f"Saved, but not verified: {why}.")
 
 
 @app.delete("/api/api-key")
 def remove_api_key(account: Account = Depends(accounts_gate.current_account), db: Session = Depends(get_db)):
     if not apikeys.remove(db):
         raise HTTPException(status_code=404, detail="You haven't saved a key")
-    return apikeys.status(db, account.is_admin)
+    return apikeys.status(db, account)
 
 
 def _read_uploads(uploads: list[UploadFile]) -> list[tuple[str, bytes]]:
@@ -340,16 +340,19 @@ def import_engagements(
 ):
     """Read a pasted list of clients and projects (an outline from a notes app, say) and PROPOSE engagements from it. Nothing is
     saved: the page shows them for the person to tick and add, through the ordinary create route. Their own Anthropic key pays."""
-    api_key = apikeys.require(db, account.is_admin)
+    choice = apikeys.pick(db, account)
     try:
         limits.start(("import", account.id))
     except limits.TooBusy as e:
         raise HTTPException(status_code=429, detail=str(e))
+    used: list = []  # tokens, to count the run if it is on the system key
     try:
-        return {"engagements": generate.extract_engagements(api_key, body.text), "room": max(0, builder.MAX_ENGAGEMENTS - len(builder.list_engagements(db)))}
+        return {"engagements": generate.extract_engagements(choice.key, body.text, usage=used), "room": max(0, builder.MAX_ENGAGEMENTS - len(builder.list_engagements(db)))}
     except generate.ResumeGenerationError as e:
         raise HTTPException(status_code=400, detail=str(e))
     finally:
+        if choice.metered:
+            crud.record_house_use(db, account.id, "import", used)
         limits.finish(("import", account.id))
 
 
@@ -464,16 +467,19 @@ def review_resume(
     """An AI editor's suggestions on the draft being reviewed ([{where, issue, suggestion}], maybe empty). Nothing is saved or changed;
     only what prints is sent (not private engagements, not jobs left off the resume). Their own Anthropic key pays, and it is counted
     separately from drafting so reviewing a few edits never uses up the drafts."""
-    api_key = apikeys.require(db, account.is_admin)
+    choice = apikeys.pick(db, account)
     try:
         limits.start(("review", account.id))
     except limits.TooBusy as e:
         raise HTTPException(status_code=429, detail=str(e).replace("draft", "review"))
+    used: list = []
     try:
-        return {"suggestions": generate.review_resume(api_key, body.resume_yaml)}
+        return {"suggestions": generate.review_resume(choice.key, body.resume_yaml, usage=used)}
     except generate.ResumeGenerationError as e:
         raise HTTPException(status_code=400, detail=str(e))
     finally:
+        if choice.metered:
+            crud.record_house_use(db, account.id, "review", used)
         limits.finish(("review", account.id))
 
 
@@ -490,7 +496,7 @@ def generate_resume_route(
     This returns at once with the job's state; the work runs in the background (app/drafts.py) because it takes longer than a proxy
     will wait for one request. The page then asks `/api/generate-resume/status` until it is done. The result is kept as their unsaved
     draft (unless they chose not to keep files), so a reload does not lose it."""
-    api_key = apikeys.require(db, account.is_admin)  # their own key (an administrator may use the server's)
+    choice = apikeys.pick(db, account)  # their own key (an administrator, or someone an administrator allowed, may use the server's)
     base_yaml = None
     if update_person_id is not None:
         base = crud.get_person(db, update_person_id)
@@ -514,7 +520,13 @@ def generate_resume_route(
     keep, account_id = builder.keeps_files(db), account.id
 
     def work() -> str:  # runs in its own thread, so it opens its own session and scopes it to this person, as a request would
-        resume_yaml = generate.generate_resume_yaml(api_key, linkedin_text, documents, notes, engagement_list, base_yaml)
+        used: list = []
+        try:
+            resume_yaml = generate.generate_resume_yaml(choice.key, linkedin_text, documents, notes, engagement_list, base_yaml, usage=used)
+        finally:
+            if choice.metered:  # a run on the system key is counted whether or not it worked: it was paid for
+                with SessionLocal() as session:
+                    crud.record_house_use(session, account_id, "draft", used)
         if keep:
             with owned.scope(account_id), SessionLocal() as session:
                 builder.save_draft(session, resume_yaml, update_person_id)

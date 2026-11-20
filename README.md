@@ -28,6 +28,12 @@ The admin app (`app/admin.py`) has accounts, like plans, time and finances: defa
 lets people in on the Users page or the dashboard's People page), every resume and access code is owned by one account and filtered to it below the routes
 (`shared_python.owned`), and `shared_python.accounts_gate` wraps the whole app. Administrators are `ADMIN_EMAILS`.
 
+- **The system key** (`app/apikeys.py`): an administrator can tick **Can fall back to the system key** on the Users page for a particular person (`PUT
+  /api/users/{id}/system-key`, `users.house_key`), who then uses the server's `ANTHROPIC_API_KEY` for the builder when they have not saved a key of their own;
+  their own key, if they add one, is always used first, nobody else ever gets the server's, and an administrator's own use is never counted. Every run on it (a draft,
+  a pasted-list import, a review) is recorded in `house_key_uses` with the tokens it used (counts only, never any text) and the Users page shows each person's runs
+  and an estimated dollar cost this month (tokens times the model's list price, `PRICE_*` in `app/config.py`). No limit by default; set `HOUSE_KEY_CALLS_PER_MONTH` to
+  give each such person that many runs a calendar month, after which they are told to add their own key. The page tells them the administrator is covering the cost.
 - **Invites** (`app/invites.py`, the Invites page, the same behaviour as Lists and Trips): anyone with an account can ask for a friend to be let in (up to
   `INVITES_PER_USER` different people, default 5; each email counts once whatever became of the request, until a waiting one is withdrawn); an
   administrator approves or declines each (an approved person gets an account and an email, nothing else; this app is behind the dashboard sign-in, so

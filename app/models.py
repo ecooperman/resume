@@ -25,6 +25,24 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     status = Column(String, nullable=False, default=USER_ACTIVE, server_default=USER_ACTIVE)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # An administrator's decision: this person may use the SERVER's Anthropic key (up to config.HOUSE_KEY_CALLS_PER_MONTH runs a month)
+    # when they have not saved a key of their own. Off by default: nobody else ever uses it.
+    house_key = Column(Boolean, nullable=False, default=False, server_default="0")
+
+
+class HouseKeyUse(Base):
+    """One AI run (a draft, a pasted-list import or a review) that a person made on the server's key: counted against their monthly
+    allowance, and kept with the tokens it used so the administrator can see what it really cost. Never holds any text, only counts.
+    NOT owned (shared_python.owned): the administrator reads everyone's totals; a person's own are picked out by user_id."""
+
+    __tablename__ = "house_key_uses"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    kind = Column(String, nullable=False)  # draft | import | review
+    at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    input_tokens = Column(Integer, nullable=True)
+    output_tokens = Column(Integer, nullable=True)
 
 
 class Invite(Base):

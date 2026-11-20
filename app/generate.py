@@ -377,7 +377,7 @@ DRAFT_MAX_TOKENS = 20_000
 DRAFT_EFFORT = "medium"  # how hard it thinks first; "high" (the model's default) took long enough to hit proxy time limits
 
 
-def _ask_claude(client, system: str, messages: list, max_tokens: int, effort: str = None) -> str:
+def _ask_claude(client, system: str, messages: list, max_tokens: int, effort: str = None, usage: Optional[list] = None) -> str:
     """One call to Claude; the text of its answer. Every way it can fail becomes a ResumeGenerationError whose message is safe to
     show on the page (never Anthropic's own body: it can echo the key)."""
     extra = {"output_config": {"effort": effort}} if effort else {}
@@ -393,6 +393,8 @@ def _ask_claude(client, system: str, messages: list, max_tokens: int, effort: st
         raise ResumeGenerationError("Couldn't reach Anthropic. Try again in a minute.")
     except anthropic.APIStatusError as e:
         raise ResumeGenerationError(f"Anthropic had a problem ({e.status_code}). Try again in a minute.")
+    if usage is not None and getattr(response, "usage", None) is not None:  # what the call cost in tokens, for whoever is metering it (even if the answer is then refused)
+        usage.append((getattr(response.usage, "input_tokens", 0) or 0, getattr(response.usage, "output_tokens", 0) or 0))
     if getattr(response, "stop_reason", None) == "max_tokens":
         raise ResumeGenerationError("The answer ran past its length limit and was cut off, so it was not used (a cut-off resume would be missing its later jobs). Try again; if it keeps happening, remove an old resume or file you no longer need.")
     return "".join(block.text for block in response.content if block.type == "text")
@@ -405,6 +407,7 @@ def generate_resume_yaml(
     notes: Optional[str],
     engagements: Optional[List[dict]] = None,
     base_yaml: Optional[str] = None,
+    usage: Optional[list] = None,
 ) -> str:
     """Calls Claude (with the given person's own key) to synthesize a resume.yaml from the source material (or, with `base_yaml`, merges it into the person's current resume). Returns the YAML
     text (already validated to parse and have a top-level "basics" key) - never saves anything. One repair attempt if the first
@@ -417,7 +420,7 @@ def generate_resume_yaml(
 
     last_error = None
     for attempt in range(2):
-        raw = _ask_claude(client, system, messages, max_tokens=DRAFT_MAX_TOKENS, effort=DRAFT_EFFORT)
+        raw = _ask_claude(client, system, messages, max_tokens=DRAFT_MAX_TOKENS, effort=DRAFT_EFFORT, usage=usage)
         candidate = _extract_yaml(raw)
         try:
             parsed = yaml.safe_load(candidate)
@@ -464,7 +467,7 @@ def _fit(value, limit: int) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f\u200b-\u200d\u2060\ufeff]", " ", str(value or ""))).strip()[:limit]
 
 
-def extract_engagements(api_key: str, text: str) -> List[dict]:
+def extract_engagements(api_key: str, text: str, usage: Optional[list] = None) -> List[dict]:
     """Split a pasted list of clients and projects into proposed engagements (plain dicts shaped like builder.EngagementIn, every field
     already cut to its limit). Nothing is saved here: the person reviews them first. Raises ResumeGenerationError."""
     if not api_key:
@@ -475,7 +478,7 @@ def extract_engagements(api_key: str, text: str) -> List[dict]:
     if len(text) > MAX_IMPORT_CHARS:
         raise ResumeGenerationError(f"That list is too long to read in one go (about {MAX_IMPORT_CHARS:,} characters at most). Paste it in two halves.")
     client = anthropic.Anthropic(api_key=api_key)
-    raw = _ask_claude(client, _IMPORT_SYSTEM, [{"role": "user", "content": text}], max_tokens=16_000, effort="low")
+    raw = _ask_claude(client, _IMPORT_SYSTEM, [{"role": "user", "content": text}], max_tokens=16_000, effort="low", usage=usage)
     raw = _extract_yaml(raw)  # also strips a code fence (a ```json one included is handled below)
     raw = re.sub(r"^json\s*", "", raw)
     try:
@@ -537,7 +540,7 @@ def _printable_resume(data: dict) -> str:
     return yaml.safe_dump(keep, sort_keys=False, allow_unicode=True, width=1000)
 
 
-def review_resume(api_key: str, resume_yaml: str) -> List[dict]:
+def review_resume(api_key: str, resume_yaml: str, usage: Optional[list] = None) -> List[dict]:
     """Ask Claude (the person's own key) for editor's suggestions on a draft: [{where, issue, suggestion}], possibly empty. Changes
     nothing. Raises ResumeGenerationError."""
     if not api_key:
@@ -552,7 +555,7 @@ def review_resume(api_key: str, resume_yaml: str) -> List[dict]:
         raise ResumeGenerationError("Fix the YAML first: it needs a top-level 'basics' section.")
     client = anthropic.Anthropic(api_key=api_key)
     message = f"Today's date is {date.today().isoformat()}.\n\nThe resume:\n\n{_printable_resume(data)}"
-    raw = _ask_claude(client, _REVIEW_SYSTEM, [{"role": "user", "content": message}], max_tokens=10_000, effort="medium")
+    raw = _ask_claude(client, _REVIEW_SYSTEM, [{"role": "user", "content": message}], max_tokens=10_000, effort="medium", usage=usage)
     raw = re.sub(r"^json\s*", "", _extract_yaml(raw))
     try:
         items = json.loads(raw)

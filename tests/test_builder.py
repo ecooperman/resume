@@ -50,7 +50,7 @@ class Fake:
                 if isinstance(answer, Exception):
                     raise answer
                 stop = "max_tokens" if isinstance(answer, Cut) else "end_turn"
-                return type("R", (), {"content": [type("B", (), {"type": "text", "text": str(answer)})()], "stop_reason": stop})()
+                return type("R", (), {"content": [type("B", (), {"type": "text", "text": str(answer)})()], "stop_reason": stop, "usage": type("U", (), {"input_tokens": 1000, "output_tokens": 500})()})()
 
         monkeypatch.setattr(generate.anthropic, "Anthropic", Client)
 

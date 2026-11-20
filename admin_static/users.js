@@ -28,6 +28,21 @@ function card(u) {
   if (u.status === "removed") badges.push(Global.el("span", { class: "item-badge item-badge-muted", text: "Removed" }));
   const title = Global.el("div", {}, [Global.el("strong", { text: u.email + " " }), ...badges]);
 
+  // Fall back to the system (the server's) Anthropic key, for someone who has no key of their own; usage so you can see what it costs.
+  const info = [title];
+  if (u.status === "active" && !u.is_admin) {
+    const box = Global.el("input", { type: "checkbox", id: `system-key-${u.id}` });
+    box.checked = u.system_key;
+    box.addEventListener("change", () => {
+      box.disabled = true;
+      act(box, () => send(`/${u.id}/system-key`, "PUT", { allowed: box.checked }), box.checked ? `${u.email} can now fall back to the system key.` : `${u.email} can no longer use the system key.`);
+    });
+    info.push(Global.el("label", { class: "field-hint", for: `system-key-${u.id}` }, [box, " Can fall back to the system key"]));
+  }
+  if (u.system_key || u.runs_this_month) {
+    info.push(Global.el("div", { class: "field-hint", text: `${u.runs_this_month} AI run${u.runs_this_month === 1 ? "" : "s"} on the system key this month, about $${u.cost_this_month.toFixed(2)}` }));
+  }
+
   const actions = [];
   if (u.status === "active" && !u.is_admin) {
     const b = Global.el("button", { type: "button", class: "cancel-btn", text: "Remove access" });
@@ -48,7 +63,7 @@ function card(u) {
     actions.push(restoreBtn, del);
   }
   return Global.el("div", { class: "request-card" }, [
-    Global.el("div", { class: "request-info" }, [title]),
+    Global.el("div", { class: "request-info" }, info),
     Global.el("div", { class: "request-actions" }, actions),
   ]);
 }

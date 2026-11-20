@@ -39,6 +39,14 @@ if ENV != "production":
 # `uvicorn app.server:app` serve both at localhost:8040 (public) and resume-admin.localhost:8040 (admin).
 ADMIN_HOSTS = {h.strip().lower() for h in os.environ.get("RESUME_ADMIN_HOSTS", "resume-admin.evancooperman.com,resume-admin.localhost").split(",") if h.strip()}
 
+# The server's own Anthropic key (above) is for administrators. An administrator may also let particular people fall back to it when they
+# have no key of their own (the Users page). By default that is unlimited; set HOUSE_KEY_CALLS_PER_MONTH to give each of them that many AI runs a
+# calendar month (a draft, a pasted-list import and a review each count one), after which they need a key of their own. Every run is counted
+# either way, for the usage line on the Users page; the prices are only for its estimate (dollars per million tokens for the model in app/generate.py).
+HOUSE_KEY_CALLS_PER_MONTH = int(os.environ.get("HOUSE_KEY_CALLS_PER_MONTH", "0"))  # 0 = no limit
+PRICE_INPUT_PER_MTOK = 5.0
+PRICE_OUTPUT_PER_MTOK = 25.0
+
 # How many different people an ordinary account may ask to have let in (administrators: no limit). Each email counts once, whatever
 # became of the request, until the person withdraws one still waiting, so being refused does not hand the slot back.
 INVITES_PER_USER = int(os.environ.get("INVITES_PER_USER", "5"))

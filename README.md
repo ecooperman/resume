@@ -64,6 +64,9 @@ lets people in on the Users page or the dashboard's People page), every resume a
   The extension stores that answer and shows a yellow "a newer version is available" notice in its popup and options page (comparing with its own version when it opens, so the notice clears as soon as it is updated);
   the Jobs page shows a banner when any of the person's tokens last reported an older version, and the token list shows each one's version. An extension that sends no version (0.2.0 and earlier) is never claimed to be
   out of date, so people still on 0.2.0 learn of 0.3.0 only by being told once: from 0.3.0 on, updates announce themselves.
+- **Deleting jobs in bulk** (`POST /api/jobs/delete {job_ids}`): the Jobs page's "Delete the N jobs showing" (or "Delete all N jobs" with no filter on) removes exactly the jobs the filters leave on screen, after two
+  confirmations, like removing all engagements. Someone with several resumes also gets a resume filter (and each job shows which resume it belongs to), so one resume's jobs can be cleared without touching the rest.
+  Ids that are not the signed-in person's own are ignored, so it can only ever remove their own jobs.
 - **Pushing jobs from the Chrome extension** (`app/push.py`, `app/tokens.py`, table `push_tokens`): a signed-in person makes a personal token on the Jobs page ("Connect the Chrome
   extension"; shown once, only its SHA-256 kept, up to 10, removing one revokes it). The extension sends `Authorization: Bearer <token>` to `POST /api/push/jobs`
   (`{jobs: [{url, title, company, salary, jd_text, optionally tier/summary/matched/gaps/strengths}], person_id?, score?}`, up to 200 postings and 12 MB) and `GET /api/push/ping`

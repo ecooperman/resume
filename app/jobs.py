@@ -110,6 +110,22 @@ def import_jobs(file: UploadFile = File(...), person_id: Optional[int] = Form(de
         raise HTTPException(status_code=400, detail=str(e))
 
 
+class DeleteMany(BaseModel):
+    job_ids: list[int]
+
+
+@router.post("/delete")
+def delete_many_jobs(body: DeleteMany, db: Session = Depends(get_db)):
+    """Delete the named jobs for good (the page's 'Delete the N jobs showing', after two confirmations). Ids that are not the signed-in person's own
+    are ignored, so this can only ever remove their own jobs. At most one account's worth in one request."""
+    ids = list(dict.fromkeys(body.job_ids))
+    if not ids:
+        raise HTTPException(status_code=400, detail="No jobs were named")
+    if len(ids) > config.MAX_JOBS_PER_ACCOUNT:
+        raise HTTPException(status_code=400, detail=f"Too many at once (the most is {config.MAX_JOBS_PER_ACCOUNT})")
+    return {"removed": crud.delete_jobs(db, ids)}
+
+
 @router.get("/{job_id:int}")
 def get_job(job_id: int, db: Session = Depends(get_db)):
     return _detail(_get(db, job_id))

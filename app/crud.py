@@ -380,6 +380,13 @@ def delete_job(db: Session, job: models.Job) -> None:
     db.commit()
 
 
+def delete_jobs(db: Session, job_ids: list) -> int:
+    """Delete these jobs (only the signed-in person's own can be found, so a made-up or someone else's id is simply not counted). Returns how many went."""
+    removed = db.query(models.Job).filter(models.Job.id.in_(job_ids)).delete(synchronize_session=False)
+    db.commit()
+    return removed
+
+
 def import_jobs_from_csv(db: Session, rows: list, person_id: Optional[int] = None) -> dict:
     """Bulk-upsert jobs from a scored-jobs CSV (the job-scoring Chrome extension's export: url, title, company, salary, tier, summary, matched,
     gaps, strengths, scored_at, jd_text). A job already here (matched by url) has ONLY its score fields refreshed, so re-scoring a list never

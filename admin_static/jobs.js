@@ -9,6 +9,7 @@ const FILTER_KEY = "resume-job-filters";
 let jobs = [];
 let me = { is_admin: false };
 let resumes = [];
+let resumeFilter = ""; // which resume's jobs are shown, for someone with several: "" = all, "none" = not tied to one, else a resume id
 const expanded = new Set(); // which cards are open, kept across re-draws so acting on a job does not collapse it and jump the page
 const details = new Map(); // job id -> the full job, fetched when its card first opens
 
@@ -158,6 +159,7 @@ function jobCard(job) {
   summary.appendChild(Global.el("span", { class: "item-summary-title", text: job.name }));
   if (job.company) summary.appendChild(Global.el("span", { class: "item-badge item-badge-muted", text: job.company }));
   summary.appendChild(tierBadge(tierOf(job)));
+  if (resumes.length > 1 && resumeName(job.person_id)) summary.appendChild(Global.el("span", { class: "item-badge item-badge-muted", title: "The resume this job is scored and tailored from", text: resumeName(job.person_id) }));
   if (job.applied) summary.appendChild(Global.el("span", { class: "item-badge item-badge-accent", text: "Applied" }));
   summary.appendChild(Global.el("span", { class: "item-chevron", "aria-hidden": "true", text: "▸" }));
 
@@ -264,9 +266,17 @@ function jobDetail(job, full) {
 
 const RANK = { Strong: 0, Good: 1, Possible: 2, Unclear: 3, Weak: 4, Unscored: 5 };
 
+function matchesResume(job) {
+  if (!resumeFilter) return true;
+  if (resumeFilter === "none") return !job.person_id;
+  return String(job.person_id) === resumeFilter;
+}
+
+const resumeName = (id) => (resumes.find((p) => p.id === id) || {}).name;
+
 function visibleJobs() {
   return jobs
-    .filter((j) => !hiddenTiers.has(tierOf(j)) && !(hideApplied && j.applied))
+    .filter((j) => !hiddenTiers.has(tierOf(j)) && !(hideApplied && j.applied) && matchesResume(j))
     .sort((a, b) => RANK[tierOf(a)] - RANK[tierOf(b)] || b.id - a.id); // best fit first, newest first within a tier
 }
 
@@ -292,7 +302,21 @@ function renderFilters() {
     saveFilters();
     render();
   });
-  host.replaceChildren(...chips, Global.el("label", { class: "job-filter-applied", for: "hide-applied" }, [hide, " Hide the ones I've applied to"]));
+  const extra = [];
+  if (resumes.length > 1) {
+    const pick = Global.el("select", { id: "resume-filter", "aria-label": "Show the jobs for one resume" }, [
+      Global.el("option", { value: "", text: "All my resumes" }),
+      ...resumes.map((p) => Global.el("option", { value: String(p.id), text: p.name })),
+      Global.el("option", { value: "none", text: "Not tied to a resume" }),
+    ]);
+    pick.value = resumeFilter;
+    pick.addEventListener("change", () => {
+      resumeFilter = pick.value;
+      render();
+    });
+    extra.push(pick);
+  }
+  host.replaceChildren(...chips, ...extra, Global.el("label", { class: "job-filter-applied", for: "hide-applied" }, [hide, " Hide the ones I've applied to"]));
   host.classList.toggle("hidden", jobs.length === 0);
 }
 
@@ -397,6 +421,46 @@ async function refreshJobs() {
   }
 }
 
+// "Delete the N jobs showing": whatever the filters leave on screen, so with none on it is every job. Two confirmations, as for removing all engagements.
+function filtersInUse() {
+  const parts = [];
+  if (resumeFilter) parts.push(resumeFilter === "none" ? "jobs not tied to a resume" : `resume: ${resumeName(Number(resumeFilter)) || "?"}`);
+  if (hiddenTiers.size) parts.push(`hiding ${[...hiddenTiers].join(", ")}`);
+  if (hideApplied) parts.push("hiding the ones you've applied to");
+  return parts;
+}
+
+function renderDeleteShown(shown) {
+  const host = document.getElementById("delete-shown");
+  host.classList.toggle("hidden", shown.length < 2);
+  if (shown.length < 2) return; // one job has its own Delete button
+  const all = shown.length === jobs.length;
+  const button = Global.el("button", { type: "button", class: "danger-btn", "data-btn-icon": "trash", text: all ? `Delete all ${shown.length} jobs` : `Delete the ${shown.length} jobs showing` });
+  button.addEventListener("click", () => deleteShown(shown.map((j) => j.id), all));
+  host.replaceChildren(button);
+  Global.iconifyButtons && Global.iconifyButtons(host);
+}
+
+async function deleteShown(ids, all) {
+  const n = ids.length;
+  const what = all ? `ALL ${n} of your jobs` : `the ${n} jobs showing now (${filtersInUse().join("; ")}); the others are kept`;
+  if (!confirm(`Delete ${what}?\n\nEach one goes with its score, notes, "applied" mark and any resume and cover letter made for it. This cannot be undone.`)) return;
+  if (!confirm(`Last check: really delete ${n} job${n === 1 ? "" : "s"}?`)) return;
+  try {
+    const result = await Global.withLoading(document.getElementById("jobs"), Global.fetchJSON(`${JOBS_API}/delete`, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ job_ids: ids }) }));
+    const gone = new Set(ids);
+    jobs = jobs.filter((j) => !gone.has(j.id));
+    for (const id of ids) {
+      expanded.delete(id);
+      details.delete(id);
+    }
+    Global.showMessage(`Deleted ${result.removed} job${result.removed === 1 ? "" : "s"}.`, "success");
+  } catch (err) {
+    Global.showMessage(err.message, "error");
+  }
+  render();
+}
+
 function render() {
   renderFilters();
   renderBulk();
@@ -405,6 +469,7 @@ function render() {
   const count = document.getElementById("job-count");
   count.textContent = `Showing ${shown.length} of ${jobs.length} job${jobs.length === 1 ? "" : "s"}`;
   count.classList.toggle("hidden", jobs.length === 0);
+  renderDeleteShown(shown);
   if (!jobs.length) {
     host.replaceChildren(Global.el("p", { class: "hint", text: "No jobs yet. Add one above, or import a CSV from the Chrome extension." }));
   } else if (!shown.length) {

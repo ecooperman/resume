@@ -161,3 +161,31 @@ def test_deleting_a_removed_persons_data_deletes_their_jobs_too(person, people):
     assert owner.delete(f"/api/users/{bob_id}/data").status_code == 200
     with SessionLocal() as db:
         assert db.query(models.Job).count() == 0
+
+
+# --- deleting many at once (the page's "Delete the N jobs showing", after two confirmations) ---------------------------------------------
+
+
+def test_deleting_the_named_jobs_removes_exactly_those_and_the_rest_stay(person, people):
+    bob = person("bob@example.com")
+    ids = [add(bob, f"Job {n}", url=f"https://jobs.example/{n}")["id"] for n in range(5)]
+    got = bob.post("/api/jobs/delete", json={"job_ids": ids[:3] + [ids[0], 99999]})  # a repeat and one that does not exist change nothing
+    assert got.status_code == 200 and got.json() == {"removed": 3}
+    assert sorted(j["id"] for j in bob.get("/api/jobs").json()) == ids[3:]
+    assert bob.get(f"/api/jobs/{ids[0]}").status_code == 404
+
+
+def test_deleting_many_can_never_touch_anyone_elses_jobs(person, people):
+    bob, carol = person("bob@example.com"), person("carol@example.com")
+    bobs = [add(bob, f"Bobs {n}", url=f"https://jobs.example/b{n}")["id"] for n in range(3)]
+    mine = add(carol, "Carols", url="https://jobs.example/c")["id"]
+    assert carol.post("/api/jobs/delete", json={"job_ids": bobs + [mine]}).json() == {"removed": 1}  # only her own
+    assert len(bob.get("/api/jobs").json()) == 3
+
+
+def test_deleting_many_needs_a_list_of_a_sensible_size(person, people, monkeypatch):
+    bob = person("bob@example.com")
+    assert bob.post("/api/jobs/delete", json={"job_ids": []}).status_code == 400
+    assert bob.post("/api/jobs/delete", json={}).status_code == 422
+    monkeypatch.setattr(config, "MAX_JOBS_PER_ACCOUNT", 3)
+    assert bob.post("/api/jobs/delete", json={"job_ids": [1, 2, 3, 4]}).status_code == 400

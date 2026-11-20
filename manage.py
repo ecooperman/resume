@@ -20,6 +20,10 @@ edit after that goes through the admin UI (People), never a file again:
     python manage.py seed-person --slug evan --name "Evan Cooperman" \\
         --file evan-resume.yaml --default
 
+One-time move of a person's jobs out of time-management (read-only on its database; never overwrites anything already here; try --dry-run first):
+
+    python manage.py import-jobs --from /opt/apps/time-management/tasks.db --owner you@example.com --dry-run
+
 Run this against whichever access.db actually backs the live site -- on the
 droplet, that means running it from /opt/apps/resume with the venv active,
 same as any other DB-touching command there. A code only works against the
@@ -131,6 +135,34 @@ def cmd_seed_person(args):
         db.close()
 
 
+def cmd_import_jobs(args):
+    from app import legacy_jobs
+
+    db = SessionLocal()
+    try:
+        owner_email = crud.normalize_email(args.owner)
+        with owned.unscoped():
+            owner = crud.get_user_by_email(db, owner_email)
+            if owner is None and owner_email in config.ADMIN_EMAILS:
+                owner = crud.adopt_or_create_admin(db, owner_email)
+        if owner is None:
+            print(f"error: {owner_email!r} has no account here - let them in via the admin UI first", file=sys.stderr)
+            sys.exit(1)
+        try:
+            with owned.scope(owner.id):
+                result = legacy_jobs.import_jobs(db, args.source, owner_email, dry_run=args.dry_run)
+        except legacy_jobs.LegacyImportError as e:
+            print(f"error: {e}", file=sys.stderr)
+            sys.exit(1)
+        print(("DRY RUN (nothing was saved): " if args.dry_run else "") + f"{result['created']} added, {result['merged']} already here (gaps filled, nothing overwritten), {result['skipped']} skipped (no link or title)")
+        if result["over_limit"]:
+            print(f"  {result['over_limit']} not added: over the {config.MAX_JOBS_PER_ACCOUNT}-job limit")
+        if result["labels_unmatched"]:
+            print(f"  these resume slugs are set on time-management labels but are not one of this person's resumes here (those jobs were left on the default resume): {', '.join(result['labels_unmatched'])}")
+    finally:
+        db.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -157,6 +189,12 @@ def main():
     p_seed.add_argument("--default", action="store_true", help="Make this the default person")
     p_seed.add_argument("--owner", help="Email of the account that owns it (default: the first administrator)")
     p_seed.set_defaults(func=cmd_seed_person)
+
+    p_jobs = sub.add_parser("import-jobs", help="One-time: copy one person's jobs from time-management's database into this app")
+    p_jobs.add_argument("--from", dest="source", required=True, help="Path to time-management's tasks.db (opened read-only)")
+    p_jobs.add_argument("--owner", required=True, help="Email of the person whose jobs to move (an account here and in time-management)")
+    p_jobs.add_argument("--dry-run", action="store_true", help="Show what would happen and keep nothing")
+    p_jobs.set_defaults(func=cmd_import_jobs)
 
     args = parser.parse_args()
     args.func(args)

@@ -54,6 +54,11 @@ lets people in on the Users page or the dashboard's People page), every resume a
   model dropped it). Downloads render on the spot, nothing stored as a file: `GET /api/jobs/{id}/resume?format=pdf|docx` and `.../cover-letter?format=pdf|docx` (the letterhead is the
   tailored resume's `basics`). PDFs need Playwright's Chromium (installed on the droplet; on a new dev machine run `playwright install chromium`); Word files do not. The Word
   renderer needs `basics.title` on the resume.
+  **Moving jobs out of time-management** (`app/legacy_jobs.py`, `python manage.py import-jobs --from <time-management tasks.db> --owner <email> [--dry-run]`; run on the droplet from
+  `/opt/apps/resume` with the venv active): reads time-management's `jobs` table READ-ONLY for that one account and adds each job here with everything it has (score, description, applied,
+  the tailored resume and letter, dates). A job whose link is already here (for example from the extension's CSV) is never overwritten: only what it has nothing for is filled in, and
+  `applied` is kept if either side had it, so it is safe to run twice. A job's time-management label becomes the resume it is tailored from, through the `resume_person_slug` on that label
+  (a label with none, or a slug that is not one of this person's resumes here, leaves the job on their default resume and is reported). One person's jobs only: it needs an account here.
 - **Pushing jobs from the Chrome extension** (`app/push.py`, `app/tokens.py`, table `push_tokens`): a signed-in person makes a personal token on the Jobs page ("Connect the Chrome
   extension"; shown once, only its SHA-256 kept, up to 10, removing one revokes it). The extension sends `Authorization: Bearer <token>` to `POST /api/push/jobs`
   (`{jobs: [{url, title, company, salary, jd_text, optionally tier/summary/matched/gaps/strengths}], person_id?, score?}`, up to 200 postings and 12 MB) and `GET /api/push/ping`

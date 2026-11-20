@@ -4,6 +4,8 @@ another person's key or the server's (an administrator excepted), nothing upload
 Claude, and a hostile file cannot hurt the server."""
 import io
 import json
+import threading
+import time
 import zipfile
 
 import anthropic
@@ -26,6 +28,10 @@ def key_storage(monkeypatch):
     monkeypatch.setattr(settings, "KEY_ENCRYPTION_SECRET", "test-secret-for-keys")
 
 
+class Cut(str):
+    """A scripted answer that stopped because it ran out of room (stop_reason max_tokens), not because it was finished."""
+
+
 class Fake:
     """Stands in for anthropic.Anthropic: records what it was given, answers from a script."""
 
@@ -43,7 +49,8 @@ class Fake:
                 answer = outer.answers.pop(0)
                 if isinstance(answer, Exception):
                     raise answer
-                return type("R", (), {"content": [type("B", (), {"type": "text", "text": answer})()]})()
+                stop = "max_tokens" if isinstance(answer, Cut) else "end_turn"
+                return type("R", (), {"content": [type("B", (), {"type": "text", "text": str(answer)})()], "stop_reason": stop})()
 
         monkeypatch.setattr(generate.anthropic, "Anthropic", Client)
 
@@ -80,6 +87,36 @@ class Refused:
         return {"detail": self.text}
 
 
+class Finished:
+    """What POST /api/generate-resume used to answer in one go: a status code and a body."""
+
+    def __init__(self, status_code, body):
+        self.status_code, self._body = status_code, body
+        self.text = json.dumps(body)
+
+    def json(self):
+        return self._body
+
+
+def run_draft(client, timeout=10, **kwargs):
+    """Start a draft and wait for the background job to end: a 200 with the resume_yaml, or the failure as a 400 with its detail. A start
+    that is refused at once (no key, not your resume, too many drafts) comes back as the response it was."""
+    started = client.post("/api/generate-resume", **kwargs)
+    if started.status_code != 200:
+        return started
+    deadline = time.time() + timeout
+    while True:
+        job = client.get("/api/generate-resume/status").json()
+        if job["state"] != "running":
+            break
+        assert time.time() < deadline, "the draft never finished"
+        time.sleep(0.01)
+    client.delete("/api/generate-resume/status")
+    if job["state"] == "done":
+        return Finished(200, {"resume_yaml": job["resume_yaml"]})
+    return Finished(400, {"detail": job.get("error", "")})
+
+
 def upload(client, files, **fields):
     """Keep the files (POST /api/builder/sources), then draft from everything kept (POST /api/generate-resume)."""
     if files:
@@ -88,7 +125,7 @@ def upload(client, files, **fields):
             return kept
         if kept.json()["rejected"]:
             return Refused(" ".join(r["problem"] for r in kept.json()["rejected"]))
-    return client.post("/api/generate-resume", data=fields)
+    return run_draft(client, data=fields)
 
 
 # --- the key ---------------------------------------------------------------------------------------------------------------------
@@ -276,7 +313,7 @@ def test_an_update_is_told_to_merge_into_their_current_resume(person, people, mo
     bob.put("/api/api-key", json={"key": KEY_A})
     bob.post("/api/engagements", json=ENGAGEMENT)
     mine = make_resume(bob)
-    resp = bob.post("/api/generate-resume", files=[("sources", ("new.zip", make_zip(LINKEDIN)))], data={"update_person_id": str(mine)})
+    resp = run_draft(bob, files=[("sources", ("new.zip", make_zip(LINKEDIN)))], data={"update_person_id": str(mine)})
     assert resp.status_code == 200
     call = fake.calls[0]
     assert "THIS IS AN UPDATE" in call["system"] and "Their hand edits win" in call["system"]
@@ -296,7 +333,7 @@ def test_an_update_needs_new_material_not_just_the_old_resume(person, people, mo
     bob = person("bob@example.com")
     bob.put("/api/api-key", json={"key": KEY_A})
     mine = make_resume(bob)
-    resp = bob.post("/api/generate-resume", data={"update_person_id": str(mine)})
+    resp = run_draft(bob, data={"update_person_id": str(mine)})
     assert resp.status_code == 400 and "No source material" in resp.json()["detail"] and fake.calls == []
 
 
@@ -306,7 +343,7 @@ def test_nobody_can_merge_into_or_read_someone_elses_resume_through_an_update(pe
     bob, carol = person("bob@example.com"), person("carol@example.com")
     carol.put("/api/api-key", json={"key": KEY_B})
     bobs = make_resume(bob, CURRENT.replace("Bob Builder", "BOBS-PRIVATE-NAME"))
-    resp = carol.post("/api/generate-resume", files=[("sources", ("a.txt", b"hi"))], data={"update_person_id": str(bobs)})
+    resp = run_draft(carol, files=[("sources", ("a.txt", b"hi"))], data={"update_person_id": str(bobs)})
     assert resp.status_code == 404 and fake.calls == [] and "BOBS-PRIVATE" not in resp.text
 
 
@@ -533,9 +570,9 @@ def test_drafting_again_after_one_more_engagement_needs_nothing_else(person, peo
     bob = person("bob@example.com")
     bob.put("/api/api-key", json={"key": KEY_A})
     bob.post("/api/builder/sources", files=[("sources", ("export.zip", make_zip(LINKEDIN)))])
-    assert bob.post("/api/generate-resume").status_code == 200
+    assert run_draft(bob).status_code == 200
     bob.post("/api/engagements", json=ENGAGEMENT)
-    assert bob.post("/api/generate-resume").status_code == 200  # no upload this time
+    assert run_draft(bob).status_code == 200  # no upload this time
     second = fake.calls[1]["messages"][0]["content"]
     assert "Globex" in second and "Acme" in second and "Engagement 1" in second  # the kept LinkedIn text and the new engagement
 
@@ -582,7 +619,7 @@ def test_when_files_are_not_kept_nothing_is_stored_and_the_files_ride_with_each_
     assert refused.status_code == 409 and bob.put("/api/builder/draft", json={"resume_yaml": "x"}).status_code == 409
     seen = bob.post("/api/builder/inspect", files=[("sources", ("export.zip", make_zip(LINKEDIN))), ("sources", ("cv.txt", b"one two three"))]).json()["files"]
     assert seen[0]["found"]["Positions"] == 3 and seen[1]["summary"] == "3 words read"
-    resp = bob.post("/api/generate-resume", files=[("sources", ("old.txt", b"SENT-WITH-THE-DRAFT"))])
+    resp = run_draft(bob, files=[("sources", ("old.txt", b"SENT-WITH-THE-DRAFT"))])
     assert resp.status_code == 200 and "SENT-WITH-THE-DRAFT" in fake.calls[0]["messages"][0]["content"]
     assert bob.get("/api/builder/sources").json() == [] and bob.get("/api/builder/draft").json() == {"draft": None}
     with __import__("app.database", fromlist=["SessionLocal"]).SessionLocal() as db:
@@ -598,7 +635,7 @@ def test_a_generated_draft_is_kept_and_it_cannot_point_at_someone_elses_resume(p
     bob, carol = person("bob@example.com"), person("carol@example.com")
     bob.put("/api/api-key", json={"key": KEY_A})
     bob.post("/api/engagements", json=ENGAGEMENT)
-    assert bob.post("/api/generate-resume").status_code == 200
+    assert run_draft(bob).status_code == 200
     assert bob.get("/api/builder/draft").json()["draft"]["resume_yaml"] == GOOD_YAML.strip()
     carols = make_resume(carol)
     assert bob.put("/api/builder/draft", json={"resume_yaml": "basics: {}", "person_id": carols}).status_code == 404

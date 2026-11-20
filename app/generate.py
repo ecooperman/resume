@@ -18,6 +18,7 @@ import csv
 import io
 import json
 import re
+from datetime import date
 import zipfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -368,11 +369,20 @@ def _extract_yaml(text: str) -> str:
 MODEL = "claude-opus-5"
 
 
-def _ask_claude(client, system: str, messages: list, max_tokens: int) -> str:
+# The model thinks before it answers, and its thinking counts against max_tokens along with the answer itself, so a limit that looks
+# generous for a resume (it is about 7,000 tokens) can run out part-way through (a draft once stopped in the middle of a job and every
+# job, the skills and the education after it were silently missing). Both limits stay under the SDK's 21,333-token ceiling for a
+# request that is not streamed. A response that stopped for lack of room is refused (see _ask_claude), never used.
+DRAFT_MAX_TOKENS = 20_000
+DRAFT_EFFORT = "medium"  # how hard it thinks first; "high" (the model's default) took long enough to hit proxy time limits
+
+
+def _ask_claude(client, system: str, messages: list, max_tokens: int, effort: str = None) -> str:
     """One call to Claude; the text of its answer. Every way it can fail becomes a ResumeGenerationError whose message is safe to
     show on the page (never Anthropic's own body: it can echo the key)."""
+    extra = {"output_config": {"effort": effort}} if effort else {}
     try:
-        response = client.messages.create(model=MODEL, max_tokens=max_tokens, system=system, messages=messages)
+        response = client.messages.create(model=MODEL, max_tokens=max_tokens, system=system, messages=messages, **extra)
     except anthropic.AuthenticationError:
         raise ResumeGenerationError("Anthropic didn't accept your key. Check it in step 1 (it may have been deleted or revoked).")
     except anthropic.PermissionDeniedError:
@@ -383,6 +393,8 @@ def _ask_claude(client, system: str, messages: list, max_tokens: int) -> str:
         raise ResumeGenerationError("Couldn't reach Anthropic. Try again in a minute.")
     except anthropic.APIStatusError as e:
         raise ResumeGenerationError(f"Anthropic had a problem ({e.status_code}). Try again in a minute.")
+    if getattr(response, "stop_reason", None) == "max_tokens":
+        raise ResumeGenerationError("The answer ran past its length limit and was cut off, so it was not used (a cut-off resume would be missing its later jobs). Try again; if it keeps happening, remove an old resume or file you no longer need.")
     return "".join(block.text for block in response.content if block.type == "text")
 
 
@@ -405,7 +417,7 @@ def generate_resume_yaml(
 
     last_error = None
     for attempt in range(2):
-        raw = _ask_claude(client, system, messages, max_tokens=12000)
+        raw = _ask_claude(client, system, messages, max_tokens=DRAFT_MAX_TOKENS, effort=DRAFT_EFFORT)
         candidate = _extract_yaml(raw)
         try:
             parsed = yaml.safe_load(candidate)
@@ -463,7 +475,7 @@ def extract_engagements(api_key: str, text: str) -> List[dict]:
     if len(text) > MAX_IMPORT_CHARS:
         raise ResumeGenerationError(f"That list is too long to read in one go (about {MAX_IMPORT_CHARS:,} characters at most). Paste it in two halves.")
     client = anthropic.Anthropic(api_key=api_key)
-    raw = _ask_claude(client, _IMPORT_SYSTEM, [{"role": "user", "content": text}], max_tokens=12000)
+    raw = _ask_claude(client, _IMPORT_SYSTEM, [{"role": "user", "content": text}], max_tokens=16_000, effort="low")
     raw = _extract_yaml(raw)  # also strips a code fence (a ```json one included is handled below)
     raw = re.sub(r"^json\s*", "", raw)
     try:
@@ -505,6 +517,8 @@ the person did; a count that does not match its list (says three, names five); c
 summary that repeats the bullets or reads like a LinkedIn About; vague duty-only bullets with no result; buzzword padding; tense that
 does not fit (past tense for a job that has ended, present for a current one); anything awkward, unclear or easy to misread; roles or
 dates that look inconsistent.
+You are told today's date before the resume. A date up to and including today is in the past or the present: never call it future-dated, and
+never suggest changing a date only because it looks recent or late. Only a date AFTER today is in the future.
 Rules: use ONLY facts that are in the resume. Never invent a number, result, client or date; when a number would help, say to add it
 if the person knows it. A suggestion may offer reworded text but only from what the resume already says. Do not repeat basic
 completeness checks (missing email, no bullets, bullet counts, summary length): another tool does those. Do not praise. If nothing
@@ -537,7 +551,8 @@ def review_resume(api_key: str, resume_yaml: str) -> List[dict]:
     if not isinstance(data, dict) or not isinstance(data.get("basics"), dict):
         raise ResumeGenerationError("Fix the YAML first: it needs a top-level 'basics' section.")
     client = anthropic.Anthropic(api_key=api_key)
-    raw = _ask_claude(client, _REVIEW_SYSTEM, [{"role": "user", "content": _printable_resume(data)}], max_tokens=4000)
+    message = f"Today's date is {date.today().isoformat()}.\n\nThe resume:\n\n{_printable_resume(data)}"
+    raw = _ask_claude(client, _REVIEW_SYSTEM, [{"role": "user", "content": message}], max_tokens=10_000, effort="medium")
     raw = re.sub(r"^json\s*", "", _extract_yaml(raw))
     try:
         items = json.loads(raw)

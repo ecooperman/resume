@@ -114,11 +114,13 @@ def no_network(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def fresh_draft_limits():
-    from app import limits
+    from app import drafts, limits
 
     limits.reset()
+    drafts.reset()
     yield
     limits.reset()
+    drafts.reset()
 
 
 @pytest.fixture()

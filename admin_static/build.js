@@ -53,6 +53,21 @@ function saveNotesSoon() {
 
 // --- step 1: the key ---------------------------------------------------------------------------------------------------------
 
+// A failure is shown twice: at the top of the page, as everywhere, and in the status line beside the button that was pressed, because the
+// top of the page is often out of sight (a draft takes a minute, and people scroll away while it runs).
+function reportError(err, statusEl) {
+  Global.showMessage(err.message, "error");
+  if (statusEl) {
+    statusEl.textContent = err.message;
+    statusEl.classList.add("is-error");
+  }
+}
+
+function clearStatus(statusEl) {
+  statusEl.classList.remove("is-error");
+  statusEl.textContent = "";
+}
+
 async function loadKey() {
   try {
     keyStatus = await Global.withLoading($("key-body"), Global.fetchJSON("/api/api-key"));
@@ -417,11 +432,12 @@ async function removeAllEngagements() {
   if (!confirm(`Last check: really delete all ${n} engagements?`)) return;
   const button = $("remove-all-engagements");
   button.disabled = true;
+  clearStatus($("remove-all-status"));
   try {
     const result = await Global.withLoading($("engagements"), Global.fetchJSON("/api/engagements?confirm=all", { method: "DELETE" }));
     Global.showMessage(`Removed ${result.removed} engagement${result.removed === 1 ? "" : "s"}.`, "success");
   } catch (err) {
-    Global.showMessage(err.message, "error");
+    reportError(err, $("remove-all-status"));
   } finally {
     button.disabled = false;
     await loadEngagements();
@@ -745,27 +761,83 @@ function updateDraftButton() {
   $("draft-why").textContent = why;
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const POLL_MS = 3000;
+const POLL_FAILURES_ALLOWED = 5; // a few failed checks in a row are a bad connection, not a failed draft
+
 async function draft() {
   if ($("draft-yaml").value.trim() && !$("step-review").classList.contains("hidden") && !confirm("This replaces the draft you are working on below. Continue?")) return;
   const data = new FormData(); // the files, engagements and notes are already saved; the server drafts from those
   if (!keep) localFiles.forEach((f, i) => (!localChecks[i] || localChecks[i].ok) && data.append("sources", f)); // not kept: they ride with the draft
   if (target) data.append("update_person_id", String(target.id));
   $("draft-btn").disabled = true;
-  $("draft-status").textContent = "Drafting. This usually takes 30 to 90 seconds. Keep this page open.";
+  clearStatus($("draft-status"));
   clearTimeout(notesTimer);
   try {
     // The notes are saved first so the draft uses what is on screen (engagements are already saved as they are made).
-    const result = await Global.withLoading($("step-draft"), async () => {
-      await Global.fetchJSON("/api/builder/notes", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ notes: $("notes").value }) });
-      return Global.fetchJSON("/api/generate-resume", { method: "POST", body: data });
-    });
-    await showReview(result.resume_yaml);
-    $("draft-note").classList.add("hidden");
-    Global.showMessage(target ? "Update ready. Look at what changed, fix anything, then Save." : "Draft ready. Read it through below, fix anything, then Save.", "success");
+    await Global.fetchJSON("/api/builder/notes", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ notes: $("notes").value }) });
+    // Starting returns at once; the writing happens on the server and is asked about every few seconds. One long request would be cut
+    // off by the proxy in front of the app after 100 seconds, which is shorter than a long resume takes.
+    await waitForDraft(await Global.fetchJSON("/api/generate-resume", { method: "POST", body: data }));
   } catch (err) {
-    Global.showMessage(err.message, "error");
+    reportError(err, $("draft-status"));
   } finally {
-    $("draft-status").textContent = "";
+    updateDraftButton();
+  }
+}
+
+// Follow a draft that is running on the server until it ends, then show it (or throw why not). The spinner stays up the whole time.
+async function waitForDraft(job) {
+  const startedAt = Date.now() - (job.elapsed || 0) * 1000;
+  let failures = 0;
+  await Global.withLoading($("step-draft"), async () => {
+    while (job.state === "running") {
+      const seconds = Math.round((Date.now() - startedAt) / 1000);
+      $("draft-status").textContent = `Drafting (${seconds} seconds so far). This usually takes a minute or two. You can leave this page or reload it; the draft keeps going.`;
+      await sleep(POLL_MS);
+      try {
+        job = await Global.fetchJSON("/api/generate-resume/status");
+        failures = 0;
+      } catch (err) {
+        if (++failures >= POLL_FAILURES_ALLOWED) throw err;
+      }
+    }
+  });
+  clearStatus($("draft-status"));
+  const collect = () => Global.fetchJSON("/api/generate-resume/status", { method: "DELETE" }).catch(() => {}); // forget it on the server: it has been seen
+  if (job.state === "idle") throw new Error("The draft was interrupted (the server restarted while it was writing). Press Draft my resume again.");
+  if (job.state === "error") {
+    await collect();
+    throw new Error(job.error);
+  }
+  await showReview(job.resume_yaml);
+  $("draft-note").classList.add("hidden");
+  await collect();
+  Global.showMessage(job.update_person_id ? "Update ready. Look at what changed, fix anything, then Save." : "Draft ready. Read it through below, fix anything, then Save.", "success");
+}
+
+// On opening the page: a draft started earlier may still be running (or have just finished) on the server. Pick it up. True if it was shown.
+async function resumePendingDraft() {
+  let job;
+  try {
+    job = await Global.fetchJSON("/api/generate-resume/status");
+  } catch (err) {
+    return false;
+  }
+  if (job.state === "idle") return false;
+  if (job.update_person_id) {
+    target = myPeople.find((p) => p.id === job.update_person_id) || target;
+    await loadTarget();
+    renderMode();
+  }
+  $("draft-btn").disabled = true;
+  try {
+    await waitForDraft(job);
+    return true;
+  } catch (err) {
+    reportError(err, $("draft-status"));
+    return false; // an older kept draft, if there is one, is still shown by restoreDraft
+  } finally {
     updateDraftButton();
   }
 }
@@ -823,6 +895,8 @@ async function discardDraft() {
   $("save-status").textContent = "";
 }
 
+const RECENT_DRAFT_MS = 10 * 60 * 1000;
+
 async function restoreDraft() {
   recallReview();
   let saved = null;
@@ -835,7 +909,10 @@ async function restoreDraft() {
   target = saved.person_id ? myPeople.find((p) => p.id === saved.person_id) || null : null;
   await loadTarget();
   renderMode();
-  await showReview(saved.resume_yaml, { scroll: false, keepReview: true });
+  // A draft touched in the last few minutes is one the person is in the middle of (a page reloaded while it was being written, or just
+  // after): take them to it. An older one waiting from another day does not pull the page down past the earlier steps.
+  const recent = Date.now() - Date.parse(saved.updated_at) < RECENT_DRAFT_MS;
+  await showReview(saved.resume_yaml, { scroll: recent, keepReview: true });
   const note = $("draft-note");
   note.textContent = `This is the draft you were working on (last changed ${new Date(saved.updated_at).toLocaleString()}). It is not saved as your resume yet.`;
   note.classList.remove("hidden");
@@ -1054,17 +1131,20 @@ function renderAiReview() {
 async function reviewWithAI() {
   const button = $("review-btn");
   button.disabled = true;
+  clearStatus($("review-status"));
   $("review-status").textContent = "Reading your resume...";
   $("ai-suggestions").replaceChildren();
   const text = $("draft-yaml").value;
+  let failure = null;
   try {
     const result = await Global.withLoading($("ai-suggestions"), Global.fetchJSON("/api/builder/review", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ resume_yaml: text }) }));
     rememberReview({ suggestions: result.suggestions, at: new Date().toISOString(), yaml: text });
   } catch (err) {
-    Global.showMessage(err.message, "error");
+    failure = err;
   } finally {
     button.disabled = false;
     renderAiReview();
+    if (failure) reportError(failure, $("review-status")); // after the render, which writes the status line itself
   }
 }
 
@@ -1106,6 +1186,7 @@ async function save() {
   const replacing = target || (existing && !me.is_admin ? existing : null);
   if (replacing && !confirm(`This replaces your current resume, "${replacing.name}", with what is shown. Continue?`)) return;
   $("save-btn").disabled = true;
+  clearStatus($("save-status"));
   $("save-status").textContent = "Saving...";
   try {
     await Global.withLoading($("save-actions"), async () => {
@@ -1131,8 +1212,7 @@ async function save() {
       Global.showMessage("Saved.", "success");
     });
   } catch (err) {
-    $("save-status").textContent = "";
-    Global.showMessage(err.message, "error");
+    reportError(err, $("save-status"));
   } finally {
     $("save-btn").disabled = !lastPreview.ok;
   }
@@ -1173,6 +1253,6 @@ async function start() {
   Global.iconifyButtons && Global.iconifyButtons(document.body);
   await Promise.all([loadKey(), loadNotes(), loadTarget(), loadSources()]);
   await loadEngagements();
-  await restoreDraft();
+  if (!(await resumePendingDraft())) await restoreDraft();
 }
 start();

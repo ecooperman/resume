@@ -152,6 +152,13 @@ no prompt. Numbered steps:
    also gets one printed bullet ("Client: ...") written only from the person's own words, unless the job already has a bullet for that client.
 5. **Notes**, then **Draft my resume**. With a resume already saved the page defaults to **Update**: the draft is merged INTO the current resume (hand
    edits kept, only what is new or changed added, the saved engagements authoritative) and the review shows exactly which lines it changes.
+   **Drafting runs in the background** (`app/drafts.py`): `POST /api/generate-resume` only starts the job and returns at once, and the page asks
+   `GET /api/generate-resume/status` every 3 seconds (`DELETE` on it collects the result). A draft takes a minute or two, longer than the 100
+   seconds a proxy such as Cloudflare waits for one request, so a single long request used to die with a 5xx while the server finished and saved
+   the draft anyway. One job per account, kept in memory (a restart forgets it, and the page then says the draft was interrupted); a finished one
+   waits an hour to be collected, so someone who keeps no files on the server still gets it. A page reloaded mid-draft picks the job back up. The
+   model's thinking counts against `max_tokens`, so the draft asks for 20,000 at `medium` effort, and a response that stopped for lack of room
+   (`stop_reason: max_tokens`) is refused rather than used: a resume cut off after its fifth job still parses as YAML.
 6. **Check it, fix it, save it.** The draft opens beside a readable summary; only **Save** makes it the person's resume (an ordinary account replaces its
    one private resume; an administrator adds a person, never published automatically). Under the summary, **Suggestions** are plain rule-based checks (`app/feedback.py`, sent with every
    `POST /api/builder/preview`, so they update as the YAML is edited; no AI, no key): missing email, phone, title or summary, a summary over

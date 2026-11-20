@@ -22,14 +22,15 @@ from typing import Literal, Optional
 import yaml
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from shared_python import accounts_gate, oidc_login
+from shared_python import accounts_gate, oidc_login, owned
 from shared_python.accounts_gate import Account
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from . import access, apikeys, builder, config, crud, feedback, generate, limits, render, users
+from . import access, apikeys, builder, config, crud, drafts, feedback, generate, limits, render, users
+from .database import SessionLocal
 from .deps import get_db
 
 ADMIN_STATIC_DIR = Path(__file__).parent.parent / "admin_static"
@@ -468,21 +469,19 @@ def review_resume(
         limits.finish(("review", account.id))
 
 
-class GenerateResumeOut(BaseModel):
-    resume_yaml: str
-
-
-@app.post("/api/generate-resume", response_model=GenerateResumeOut)
+@app.post("/api/generate-resume")
 def generate_resume_route(
     sources: list[UploadFile] = File(default=[]),
     update_person_id: Optional[int] = Form(default=None),
     account: Account = Depends(accounts_gate.current_account),
     db: Session = Depends(get_db),
 ):
-    """Draft a resume from everything the person has STORED: the text of their files, their engagements and their notes (none of it
-    taken from the request, so what was saved is what is used; adding one engagement and drafting again is all an update needs).
-    With `update_person_id`, the draft is a merge into that resume of theirs (one they own: anyone else's is a 404), keeping their
-    edits. The result is kept as their unsaved draft (unless they chose not to keep files), so a reload does not lose it."""
+    """START drafting a resume from everything the person has STORED (the text of their files, their engagements and their notes: none
+    of it taken from the request, so what was saved is what is used; adding one engagement and drafting again is all an update needs).
+    With `update_person_id`, the draft is a merge into that resume of theirs (one they own: anyone else's is a 404), keeping their edits.
+    This returns at once with the job's state; the work runs in the background (app/drafts.py) because it takes longer than a proxy
+    will wait for one request. The page then asks `/api/generate-resume/status` until it is done. The result is kept as their unsaved
+    draft (unless they chose not to keep files), so a reload does not lose it."""
     api_key = apikeys.require(db, account.is_admin)  # their own key (an administrator may use the server's)
     base_yaml = None
     if update_person_id is not None:
@@ -504,15 +503,34 @@ def generate_resume_route(
         limits.start(account.id)
     except limits.TooBusy as e:
         raise HTTPException(status_code=429, detail=str(e))
-    try:
+    keep, account_id = builder.keeps_files(db), account.id
+
+    def work() -> str:  # runs in its own thread, so it opens its own session and scopes it to this person, as a request would
         resume_yaml = generate.generate_resume_yaml(api_key, linkedin_text, documents, notes, engagement_list, base_yaml)
-    except generate.ResumeGenerationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    finally:
-        limits.finish(account.id)
-    if builder.keeps_files(db):
-        builder.save_draft(db, resume_yaml, update_person_id)
-    return GenerateResumeOut(resume_yaml=resume_yaml)
+        if keep:
+            with owned.scope(account_id), SessionLocal() as session:
+                builder.save_draft(session, resume_yaml, update_person_id)
+        return resume_yaml
+
+    try:
+        drafts.start(account_id, work, update_person_id)
+    except Exception:
+        limits.finish(account_id)
+        raise
+    return drafts.status(account_id)
+
+
+@app.get("/api/generate-resume/status")
+def generate_resume_status(account: Account = Depends(accounts_gate.current_account)):
+    """How this person's draft is going: {state: idle | running | done | error, ...}. A finished one carries its resume_yaml."""
+    return drafts.status(account.id)
+
+
+@app.delete("/api/generate-resume/status")
+def clear_generate_resume_status(account: Account = Depends(accounts_gate.current_account)):
+    """The page has shown the finished (or failed) draft: forget it. A draft still running is left alone."""
+    drafts.clear(account.id)
+    return drafts.status(account.id)
 
 
 # --- People: browser-facing CRUD for the admin UI (admin_static/). Each account sees and changes ONLY its own resumes (the

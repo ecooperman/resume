@@ -413,3 +413,8 @@ textarea.yaml {
   flex: 0 0 auto;
   white-space: nowrap;
 }
+
+.status.is-error {
+  color: var(--danger);
+  font-weight: 500;
+}

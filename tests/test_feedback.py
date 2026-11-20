@@ -291,6 +291,8 @@ def test_the_ai_review_returns_cleaned_suggestions_and_sends_only_what_prints(pe
     ]
     sent = fake.calls[0]["messages"][0]["content"]
     assert fake.keys[-1] == KEY_A and "Built things" in sent
+    assert sent.startswith(f"Today's date is {date.today().isoformat()}.")  # without it the reviewer calls a recent date "in the future"
+    assert "never call it future-dated" in fake.calls[0]["system"]
     assert "SECRET-CLIENT" not in sent and "SECRET-OUTCOME" not in sent and "OFF-RESUME-BULLET" not in sent and "Side Gig" not in sent
 
 

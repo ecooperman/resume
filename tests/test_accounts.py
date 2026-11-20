@@ -380,7 +380,7 @@ def test_the_internal_token_renders_what_it_is_given(person, people, with_token)
 
 
 @pytest.mark.parametrize("method,path", [
-    ("GET", "/api/people"), ("POST", "/api/people"), ("GET", "/api/users"), ("GET", "/api/codes"), ("POST", "/api/generate-resume"),
+    ("GET", "/api/people"), ("POST", "/api/people"), ("GET", "/api/users"), ("GET", "/api/codes"), ("POST", "/api/generate-resume"), ("GET", "/api/generate-resume/status"),
     ("GET", "/api/me"), ("GET", "/"), ("DELETE", "/api/people/1"),
 ])
 def test_the_internal_token_opens_nothing_but_the_four_agreed_calls(person, people, with_token, method, path):

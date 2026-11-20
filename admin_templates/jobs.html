@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en" data-ui="v2" data-theme-default="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jobs · Resume</title>
+  <link rel="stylesheet" href="{{ shared_assets_base }}/theme.css">
+  <script src="{{ shared_assets_base }}/theme-init.js"></script>
+  <link rel="stylesheet" href="/style.css?v={{ asset_v('style.css') }}">
+</head>
+<body>
+  <header class="app-header">
+    <h1>Jobs</h1>
+    <p class="subtitle">Jobs you're considering, private to you. Add one (or import a whole list from the job-scoring Chrome extension), see how well it fits your resume, and make a resume and cover letter tailored to it.</p>
+  </header>
+
+  <div id="app-nav-mount"></div>
+
+  <main>
+    <div id="page-message" class="page-message hidden"></div>
+
+    <button id="show-add-job" type="button" class="add-toggle">+ Add a job</button>
+    <form id="add-job-form" class="add-card hidden">
+      <div class="field-row">
+        <div class="field">
+          <label for="job-name">Job title <span class="required">*</span></label>
+          <input id="job-name" type="text" required maxlength="300" placeholder="e.g. Senior Software Engineer">
+        </div>
+        <div class="field">
+          <label for="job-company">Company</label>
+          <input id="job-company" type="text" maxlength="300" placeholder="e.g. Acme">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="job-url">Link to the posting</label>
+          <input id="job-url" type="url" maxlength="2000" placeholder="https://...">
+        </div>
+        <div class="field">
+          <label for="job-salary">Pay, if it says</label>
+          <input id="job-salary" type="text" maxlength="300" placeholder="e.g. $150k - $180k">
+        </div>
+      </div>
+      <div class="field">
+        <label for="job-jd">The job description</label>
+        <textarea id="job-jd" rows="8" placeholder="Paste the posting's text here. The more of it you paste, the better the fit score and the tailored resume."></textarea>
+      </div>
+      <div class="item-actions">
+        <button type="submit" class="save-btn" data-btn-icon="plus">Add job</button>
+        <button type="button" id="cancel-add-job" class="cancel-btn">Cancel</button>
+      </div>
+    </form>
+
+    <button id="show-import" type="button" class="add-toggle">Import from the Chrome extension</button>
+    <div id="import-card" class="add-card hidden">
+      <p class="hint">The job-scoring Chrome extension exports a CSV of the postings it scored. Choose that file here: new jobs are added, and a job you already have (same link) only gets its score refreshed, so your notes and "applied" marks are never touched.</p>
+      <div class="field-row">
+        <div class="field">
+          <input id="import-file" type="file" accept=".csv,text/csv" aria-label="CSV file from the Chrome extension">
+        </div>
+        <div class="field hidden" id="import-resume-field">
+          <label for="import-resume">Which resume are they for?</label>
+          <select id="import-resume"></select>
+        </div>
+      </div>
+      <div class="item-actions">
+        <button type="button" id="import-btn" class="save-btn" data-btn-icon="upload">Import</button>
+        <button type="button" id="cancel-import" class="cancel-btn">Cancel</button>
+        <span id="import-status" class="status" role="status"></span>
+      </div>
+    </div>
+
+    <div id="job-filters" class="job-filters" role="group" aria-label="Show jobs by fit"></div>
+    <div id="jobs"></div>
+  </main>
+
+  <script src="{{ shared_assets_base }}/theme.js"></script>
+  <script src="{{ shared_assets_base }}/icons.js"></script>
+  <script src="/nav.js?v={{ asset_v('nav.js') }}"></script>
+  <script src="/jobs.js?v={{ asset_v('jobs.js') }}"></script>
+</body>
+</html>

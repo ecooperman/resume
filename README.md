@@ -28,6 +28,12 @@ The admin app (`app/admin.py`) has accounts, like plans, time and finances: defa
 lets people in on the Users page or the dashboard's People page), every resume and access code is owned by one account and filtered to it below the routes
 (`shared_python.owned`), and `shared_python.accounts_gate` wraps the whole app. Administrators are `ADMIN_EMAILS`.
 
+- **Jobs** (`app/jobs.py`, the Jobs page, table `jobs`): what a person is considering, private to them (owned; another person's job id is a 404). Added by
+  pasting a posting (title, company, link, pay, description) or by importing the job-scoring Chrome extension's CSV (`url, title, company, salary, tier, summary,
+  matched, gaps, strengths, scored_at, jd_text`; `|` joins the items in matched/gaps/strengths). Jobs are matched by link per person, so a re-import refreshes the
+  score fields only and never touches `applied`, notes or a resume made for the job; the resume label on an import fills in old jobs that have none and never
+  re-tags one that does. Limits: `MAX_JOBS_PER_ACCOUNT` 2000, `MAX_IMPORT_ROWS` 1000, `MAX_IMPORT_BYTES` 8 MB, descriptions cut at 60,000 characters. This
+  replaces time-management's Jobs page (the direction decided 2026-11-18: one place for the builder, the jobs and the tailored resumes).
 - **The system key** (`app/apikeys.py`): an administrator can tick **Can fall back to the system key** on the Users page for a particular person (`PUT
   /api/users/{id}/system-key`, `users.house_key`), who then uses the server's `ANTHROPIC_API_KEY` for the builder when they have not saved a key of their own;
   their own key, if they add one, is always used first, nobody else ever gets the server's, and an administrator's own use is never counted. Every run on it (a draft,

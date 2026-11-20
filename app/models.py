@@ -90,6 +90,39 @@ class Person(Base, owned.OwnedMixin):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class Job(Base, owned.OwnedMixin):
+    """A job someone is considering: pasted in, or imported from the job-scoring Chrome extension's CSV. Private to its owner (owned). The
+    score fields (tier .. strengths) come from the extension's export or from scoring here; `generated_*` are the tailored resume (YAML,
+    the same shape as a resume) and cover letter made for this job, rendered to PDF or Word on demand rather than stored as files.
+    `person_id` is which of the owner's resumes the job is tailored from (null: their only, or default, resume). One row per URL per
+    owner, so re-importing a list refreshes the scores and never touches what they tracked."""
+
+    __tablename__ = "jobs"
+    __table_args__ = (UniqueConstraint("owner_id", "url", name="uq_jobs_owner_id_url"),)
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)  # the job title
+    company = Column(String, nullable=True)
+    company_url = Column(String, nullable=True)
+    url = Column(String, nullable=True)  # a pasted job may have none
+    applied = Column(Boolean, nullable=False, default=False, server_default="0")
+    notes = Column(Text, nullable=True)
+    person_id = Column(Integer, ForeignKey("people.id"), nullable=True)
+    salary = Column(String, nullable=True)
+    tier = Column(String, nullable=True)  # Strong | Good | Possible | Weak | Unclear, or null: not scored yet
+    summary = Column(Text, nullable=True)
+    matched = Column(Text, nullable=True)
+    gaps = Column(Text, nullable=True)
+    strengths = Column(Text, nullable=True)
+    scored_at = Column(DateTime, nullable=True)
+    jd_text = Column(Text, nullable=True)
+    generated_resume_yaml = Column(Text, nullable=True)
+    generated_cover_letter = Column(Text, nullable=True)
+    resume_generated_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
 class AccessCode(Base, owned.OwnedMixin):
     """A capability token that unlocks the full resume (contact info +
     unredacted downloads) when passed as ?code=... on any route.

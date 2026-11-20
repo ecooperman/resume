@@ -47,6 +47,12 @@ HOUSE_KEY_CALLS_PER_MONTH = int(os.environ.get("HOUSE_KEY_CALLS_PER_MONTH", "0")
 PRICE_INPUT_PER_MTOK = 5.0
 PRICE_OUTPUT_PER_MTOK = 25.0
 
+# Jobs (app/jobs.py): how many one account may keep, and the largest CSV import (rows and bytes). A job description is cut at MAX_JD_CHARS.
+MAX_JOBS_PER_ACCOUNT = 2000
+MAX_IMPORT_ROWS = 1000
+MAX_IMPORT_BYTES = 8 * 1024 * 1024
+MAX_JD_CHARS = 60_000
+
 # How many different people an ordinary account may ask to have let in (administrators: no limit). Each email counts once, whatever
 # became of the request, until the person withdraws one still waiting, so being refused does not hand the slot back.
 INVITES_PER_USER = int(os.environ.get("INVITES_PER_USER", "5"))

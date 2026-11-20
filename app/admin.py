@@ -29,7 +29,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from . import access, apikeys, builder, config, crud, drafts, feedback, generate, invites, limits, render, users
+from . import access, apikeys, builder, config, crud, drafts, feedback, generate, invites, jobs, limits, render, users
 from .database import SessionLocal
 from .deps import get_db
 
@@ -41,6 +41,7 @@ app = FastAPI(title="Resume Admin")
 access.install(app)  # only people with an account get in, each inside their own private data (app/access.py)
 app.include_router(users.router)
 app.include_router(invites.router)
+app.include_router(jobs.router)
 app.include_router(invites.app_router)
 templates = Jinja2Templates(directory=str(ADMIN_TEMPLATES_DIR))
 
@@ -82,6 +83,7 @@ app.get("/build.html", response_class=HTMLResponse)(_page("build.html"))
 app.get("/codes.html", response_class=HTMLResponse)(_page("codes.html", admin_only=True))
 app.get("/users.html", response_class=HTMLResponse)(_page("users.html", admin_only=True))
 app.get("/invites.html", response_class=HTMLResponse)(_page("invites.html"))
+app.get("/jobs.html", response_class=HTMLResponse)(_page("jobs.html"))
 
 
 # --- internal-only endpoints, for the time-management app's resume

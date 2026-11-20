@@ -426,3 +426,121 @@ textarea.yaml {
   opacity: 0.55;
   cursor: wait;
 }
+
+/* Jobs (jobs.html): the fit tiers as tinted pills (a dark-mode set too), the filter chips and a job's score. */
+:root {
+  --tier-strong: #1d4ed8;
+  --tier-strong-bg: #dbeafe;
+  --tier-good: #0f766e;
+  --tier-good-bg: #ccfbf1;
+  --tier-possible: #92400e;
+  --tier-possible-bg: #fef3c7;
+  --tier-unclear: #6d28d9;
+  --tier-unclear-bg: #ede9fe;
+}
+
+:root[data-theme="dark"] {
+  --tier-strong: #8fb0ee;
+  --tier-strong-bg: rgba(59, 130, 246, 0.2);
+  --tier-good: #5fd3c5;
+  --tier-good-bg: rgba(20, 184, 166, 0.18);
+  --tier-possible: #e6b865;
+  --tier-possible-bg: rgba(217, 119, 6, 0.2);
+  --tier-unclear: #b79cf5;
+  --tier-unclear-bg: rgba(139, 92, 246, 0.2);
+}
+
+.tier-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.tier-strong { color: var(--tier-strong); background: var(--tier-strong-bg); }
+.tier-good { color: var(--tier-good); background: var(--tier-good-bg); }
+.tier-possible { color: var(--tier-possible); background: var(--tier-possible-bg); }
+.tier-unclear { color: var(--tier-unclear); background: var(--tier-unclear-bg); }
+.tier-weak { color: var(--muted); background: var(--muted-bg); }
+.tier-unscored { color: var(--muted); border: 1px dashed var(--border); }
+
+.job-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.job-filter {
+  padding: 4px 12px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.job-filter.on {
+  color: var(--text);
+  background: var(--muted-bg);
+  border-color: var(--border-strong);
+}
+
+.job-filter-applied {
+  font-size: 13px;
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+.job-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.job-score-salary {
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.job-score-summary {
+  margin: 0 0 8px;
+}
+
+.job-score-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-top: 8px;
+}
+
+.job-score ul {
+  margin: 2px 0 6px;
+  padding-left: 18px;
+}
+
+.job-jd {
+  white-space: pre-wrap;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+/* A job's row carries a title and up to three badges: let the badges wrap under the title on a narrow screen instead of squeezing the title away. */
+.job-summary {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.job-summary .item-summary-title {
+  flex: 1 1 12em;
+  min-width: 0;
+}

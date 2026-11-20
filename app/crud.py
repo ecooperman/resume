@@ -140,6 +140,7 @@ def delete_person(db: Session, person_id: int) -> str:
         return "not_found"
     if person.is_default:
         return "is_default"
+    db.query(models.Job).filter(models.Job.person_id == person_id).update({"person_id": None}, synchronize_session=False)  # their jobs stay, tailored from the default
     db.delete(person)
     db.commit()
     return "ok"
@@ -301,6 +302,127 @@ def add_user(db: Session, email: str):
     return user, True
 
 
+# --- jobs: what a person is considering, scored and tailored (app/jobs.py). Owned: every query below sees only the signed-in person's.
+
+
+class JobError(Exception):
+    """Something wrong with a job request that is safe to show as it is."""
+
+
+def list_jobs(db: Session) -> list[models.Job]:
+    return db.query(models.Job).order_by(models.Job.id.desc()).all()
+
+
+def get_job(db: Session, job_id: int) -> Optional[models.Job]:
+    return db.query(models.Job).filter(models.Job.id == job_id).first()
+
+
+def job_count(db: Session) -> int:
+    return db.query(func.count(models.Job.id)).scalar()
+
+
+def _check_person(db: Session, person_id: Optional[int]) -> None:
+    if person_id is not None and get_person(db, person_id) is None:
+        raise JobError("That resume isn't one of yours")
+
+
+def _clean(value, limit: int) -> Optional[str]:
+    text = (value or "").strip() if isinstance(value, str) else value
+    return text[:limit] if text else None
+
+
+def create_job(db: Session, data: dict) -> models.Job:
+    if job_count(db) >= config.MAX_JOBS_PER_ACCOUNT:
+        raise JobError(f"You can keep up to {config.MAX_JOBS_PER_ACCOUNT} jobs. Delete some you are done with first.")
+    name = _clean(data.get("name"), 300)
+    if not name:
+        raise JobError("A job needs a title")
+    url = _clean(data.get("url"), 2000)
+    if url and db.query(models.Job).filter(models.Job.url == url).first() is not None:
+        raise JobError("You already have a job with that link")
+    _check_person(db, data.get("person_id"))
+    job = models.Job(
+        name=name, company=_clean(data.get("company"), 300), company_url=_clean(data.get("company_url"), 2000), url=url,
+        notes=_clean(data.get("notes"), 5000), salary=_clean(data.get("salary"), 300), jd_text=_clean(data.get("jd_text"), config.MAX_JD_CHARS),
+        person_id=data.get("person_id"),
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+_EDITABLE = {"name": 300, "company": 300, "company_url": 2000, "url": 2000, "notes": 5000, "salary": 300, "jd_text": config.MAX_JD_CHARS}
+
+
+def update_job(db: Session, job: models.Job, changes: dict) -> models.Job:
+    for field, limit in _EDITABLE.items():
+        if field in changes:
+            value = _clean(changes[field], limit)
+            if field == "name" and not value:
+                raise JobError("A job needs a title")
+            if field == "url" and value and value != job.url and db.query(models.Job).filter(models.Job.url == value).first() is not None:
+                raise JobError("You already have a job with that link")
+            setattr(job, field, value)
+    if "applied" in changes and changes["applied"] is not None:
+        job.applied = bool(changes["applied"])
+    if "person_id" in changes:
+        _check_person(db, changes["person_id"])
+        job.person_id = changes["person_id"]
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def delete_job(db: Session, job: models.Job) -> None:
+    db.delete(job)
+    db.commit()
+
+
+def import_jobs_from_csv(db: Session, rows: list, person_id: Optional[int] = None) -> dict:
+    """Bulk-upsert jobs from a scored-jobs CSV (the job-scoring Chrome extension's export: url, title, company, salary, tier, summary, matched,
+    gaps, strengths, scored_at, jd_text). A job already here (matched by url) has ONLY its score fields refreshed, so re-scoring a list never
+    touches `applied`, notes or the resume made for it. The resume label is set on new jobs, and filled in on old ones that have none, but
+    never changed on one that already has it. Rows without a url, or new ones without a title, are skipped."""
+    _check_person(db, person_id)
+    created = updated = skipped = 0
+    room = config.MAX_JOBS_PER_ACCOUNT - job_count(db)
+    for row in rows:
+        url = _clean(row.get("url"), 2000)
+        if not url:
+            skipped += 1
+            continue
+        scored_at = None
+        raw = (row.get("scored_at") or "").strip()
+        if raw:
+            try:
+                scored_at = datetime.fromisoformat(raw.replace("Z", "+00:00")).replace(tzinfo=None)
+            except ValueError:
+                scored_at = None
+        score = {
+            "salary": _clean(row.get("salary"), 300), "tier": _clean(row.get("tier"), 40), "summary": _clean(row.get("summary"), 5000),
+            "matched": _clean(row.get("matched"), 8000), "gaps": _clean(row.get("gaps"), 8000), "strengths": _clean(row.get("strengths"), 8000),
+            "scored_at": scored_at, "jd_text": _clean(row.get("jd_text"), config.MAX_JD_CHARS),
+        }
+        existing = db.query(models.Job).filter(models.Job.url == url).first()
+        if existing is not None:
+            for field, value in score.items():
+                setattr(existing, field, value)
+            if person_id is not None and existing.person_id is None:
+                existing.person_id = person_id
+            updated += 1
+            continue
+        title = _clean(row.get("title"), 300)
+        if not title or room <= 0:
+            skipped += 1
+            continue
+        db.add(models.Job(name=title, url=url, company=_clean(row.get("company"), 300), person_id=person_id, **score))
+        room -= 1
+        created += 1
+    db.commit()
+    return {"created": created, "updated": updated, "skipped": skipped}
+
+
 # --- the server's Anthropic key: who may use it, and what they have used (app/apikeys.py)
 
 
@@ -413,6 +535,7 @@ def delete_user_data(db: Session, user_id: int) -> dict:
     db.query(models.HouseKeyUse).filter(models.HouseKeyUse.user_id == user_id).delete(synchronize_session=False)
     with owned.scope(user_id):
         slugs = [slug for (slug,) in db.query(models.Person.slug).all()]
+        db.query(models.Job).delete(synchronize_session=False)  # before the resumes they point at
         codes = db.query(models.AccessCode).delete(synchronize_session=False)
         people = db.query(models.Person).delete(synchronize_session=False)
         keys = db.query(models.UserApiKey).delete(synchronize_session=False)

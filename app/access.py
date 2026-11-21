@@ -33,7 +33,7 @@ _INTERNAL_CALLS = (
     ("POST", re.compile(r"^/api/render-cover-letter$")),
 )
 PUBLIC_PATHS = ()  # nothing in the admin app is public
-seen = usage.LastSeen(SessionLocal)  # when each person was last here, for the dashboard's stats pages
+seen = usage.LastSeen(SessionLocal, app="resume")  # when each person was last here, for the dashboard's stats pages
 
 
 def account_for(email: str) -> Union[Account, str]:

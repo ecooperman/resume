@@ -61,7 +61,9 @@ def test_a_job_with_missing_dates_title_or_company_is_a_fix_that_names_the_job()
     got = check("basics: {name: B, email: e, phone: p, title: t, summary: s}\nexperience:\n  - company: Acme\n    title: Dev\n    bullets: [x]\n  - bullets: [y]\n")
     fixes = where(got, "fix")
     assert ("Dev at Acme", "This job has no start date.") in fixes
-    assert any(w == "Dev at Acme" and "no end date" in t and "Present" in t for w, t in fixes)
+    tips = where(got, "tip")
+    assert any(w == "Dev at Acme" and "no end date" in t and "prints as Present" in t for w, t in tips)  # not a defect: it prints as Present
+    assert not any("no end date" in t for _w, t in fixes)
     assert any(w == "Job 2" and "no title" in t for w, t in fixes) and any(w == "Job 2" and "no company" in t for w, t in fixes)
 
 
@@ -341,3 +343,8 @@ def test_reviews_have_their_own_hourly_limit_apart_from_drafts(person, people, m
     resp = bob.post("/api/builder/review", json={"resume_yaml": GOOD_YAML})
     assert resp.status_code == 429 and "review" in resp.json()["detail"]
     assert all(isinstance(k, tuple) for k in limits._recent)
+
+
+def test_a_job_with_no_end_date_counts_as_current_for_the_more_than_one_current_job_tip():
+    got = check(jobs_yaml(("Acme", "Mar 2019", "Present", "['Led 3 teams']", ""), ("Beta", "Jan 2020", "", "['Built 4 sites']", "")))
+    assert any("2 jobs are marked Present" in s["text"] for s in got)

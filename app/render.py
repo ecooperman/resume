@@ -51,6 +51,17 @@ def _collapse_dashes(value):
     return value
 
 
+def job_dates(job) -> str:
+    """How a job's dates print: "start – end", where a job with a start but no end is still going and prints Present (the web page's template
+    does the same). A job with neither prints no dates at all, not a bare dash."""
+    start, end = job.get("start"), job.get("end")
+    if end in (None, ""):
+        end = "Present" if start not in (None, "") else ""
+    if start in (None, "") and end == "":
+        return ""
+    return f"{'' if start is None else start} – {end}"
+
+
 def render_html(data, *, show_download_bar):
     data = _collapse_dashes(data)
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
@@ -219,7 +230,7 @@ def build_docx(data, out_dir):
 
         p = doc.add_paragraph()
         _run(p, job.get("title", ""), bold=True, size=11, color=INK)
-        _run(p, f"\t{job.get('start', '')} – {job.get('end', '')}", size=9.5, color=MUTED)
+        _run(p, f"\t{job_dates(job)}", size=9.5, color=MUTED)
         header_paragraphs.append(p)
 
         # Company on its own line, not sharing the title's line with the

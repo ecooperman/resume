@@ -55,3 +55,17 @@ def test_the_web_page_leaves_out_an_empty_role_line():
     html = render.render_html({"basics": {"name": "Bob"}}, show_download_bar=False)
     assert "Bob" in html and 'class="role"' not in html
     assert 'class="role"' in render.render_html({"basics": {"name": "Bob", "title": "Engineer"}}, show_download_bar=False)
+
+
+def test_a_job_with_a_start_but_no_end_prints_as_present_everywhere(tmp_path):
+    data = {"basics": {"name": "Bob"}, "experience": [
+        {"company": "Acme", "title": "Dev", "start": "Mar 2019", "bullets": ["Built things"]},
+        {"company": "Beta", "title": "Dev", "start": "Jan 2015", "end": "Mar 2019", "bullets": ["Built more"]},
+        {"company": "Gamma", "title": "Dev", "bullets": ["No dates at all"]},
+    ]}
+    assert "Mar 2019 – Present" in text_of(data, tmp_path)  # the Word file
+    html = render.render_html(data, show_download_bar=False)  # the web page and the PDF
+    assert "Mar 2019 – Present" in html and "Jan 2015 – Mar 2019" in html
+    assert html.count('class="entry-dates"') == 2  # the job with no dates at all gets no dates line, not a bare dash
+    assert "Present" not in text_of({"basics": {"name": "Bob"}, "experience": [data["experience"][2]]}, tmp_path)  # no dates: no dash, no Present
+    assert render.job_dates({"start": "2020"}) == "2020 – Present" and render.job_dates({}) == "" and render.job_dates({"end": "2020"}) == " – 2020"

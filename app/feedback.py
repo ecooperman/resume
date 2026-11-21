@@ -104,7 +104,7 @@ def check_resume(data: dict, today: Optional[date] = None) -> List[dict]:
         nth_of[id(job)] = seen_companies.get(key, 0) if key else 0
         seen_companies[key] = seen_companies.get(key, 0) + 1
 
-    present = [j for j in shown if _text(j.get("end")).lower() in ("present", "current", "now")]
+    present = [j for j in shown if not _text(j.get("end")) or _text(j.get("end")).lower() in ("present", "current", "now")]  # no end prints as Present
     if len(present) > 1:
         names = ", ".join(_text(j.get("company")) or "(no company)" for j in present)
         out.append(_item("tip", "Experience", f"{len(present)} jobs are marked Present ({names}). Most people have one current job, so if the others have ended, give them an end date.", _job_find(present[0]), nth_of[id(present[0])]))
@@ -122,7 +122,7 @@ def check_resume(data: dict, today: Optional[date] = None) -> List[dict]:
         if not _text(job.get("start")):
             out.append(_item("fix", name, "This job has no start date.", _job_find(job), nth_of[id(job)]))
         if not _text(job.get("end")):
-            out.append(_item("fix", name, "This job has no end date, so it prints open-ended. If you still work there, write Present.", _job_find(job), nth_of[id(job)]))
+            out.append(_item("tip", name, "This job has no end date, so it prints as Present. If you no longer work there, add the date it ended.", _job_find(job), nth_of[id(job)]))
         start, end = _months(job.get("start"), today), _months(job.get("end"), today, late=True)  # reversed only if even earliest start / latest end are
         if start is not None and end is not None and end < start:
             out.append(_item("fix", name, f"This job ends ({_text(job.get('end'))}) before it starts ({_text(job.get('start'))}).", _job_find(job), nth_of[id(job)]))

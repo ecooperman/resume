@@ -459,7 +459,7 @@ def preview_resume(body: PreviewIn):
             "Projects": len(data.get("projects") or []),
         },
         "jobs": [
-            {"title": j.get("title", ""), "company": j.get("company", ""), "dates": f"{j.get('start', '')} - {j.get('end', '')}".strip(" -"),
+            {"title": j.get("title", ""), "company": j.get("company", ""), "dates": render.job_dates(j).replace("–", "-").strip(" -"),
              "bullets": [str(b) for b in (j.get("bullets") or [])][:12]}
             for j in jobs
         ],

@@ -293,7 +293,8 @@
             <span class="entry-title">{{ job.title }}</span>
             <div class="entry-sub"><span class="entry-company">{{ job.company }}</span>{% if job.location %} · {{ job.location }}{% endif %}</div>
           </div>
-          <div class="entry-dates">{{ job.start }} – {{ job.end }}</div>
+          {% set job_end = job.end if job.end else ("Present" if job.start else "") %}
+          {% if job.start or job_end %}<div class="entry-dates">{{ job.start if job.start else "" }} – {{ job_end }}</div>{% endif %}
         </div>
         {% if job.bullets %}
         <ul class="bullets">

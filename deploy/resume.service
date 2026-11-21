@@ -18,9 +18,10 @@ EnvironmentFile=-/etc/personal-apps/shared.env
 # time-management.service.
 Environment=INTERNAL_API_TOKEN=
 # One process serves both sites and tells them apart by the Host header
-# (RESUME_ADMIN_HOSTS, default resume-admin.evancooperman.com and
-# resume-admin.localhost; everything else is the public site). This was two
-# services, resume on 8040 and resume-admin on 8041.
+# (RESUME_ADMIN_HOSTS, default jobs.evancooperman.com, the old
+# resume-admin.evancooperman.com alias, jobs.localhost and resume-admin.localhost;
+# everything else, resume.evancooperman.com included, is the public site). This
+# was two services, resume on 8040 and resume-admin on 8041.
 ExecStart=/opt/apps/resume/venv/bin/uvicorn app.server:app --host 127.0.0.1 --port 8040
 Restart=on-failure
 RestartSec=3

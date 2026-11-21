@@ -1175,7 +1175,7 @@ function renderSaveFields() {
   const host = $("save-fields");
   const fields = [];
   if (me.is_admin && !target) {
-    // Administrators may keep several resumes; each needs a name and a short address name. It starts private; publishing is on the People page.
+    // Administrators may keep several resumes; each needs a name and a short address name. It starts private; publishing is on the Resumes page.
     const name = el("input", { type: "text", id: "save-name", placeholder: "Name", "aria-label": "Name for this resume" });
     name.addEventListener("input", () => (name.dataset.touched = "1"));
     const slug = el("input", { type: "text", id: "save-slug", placeholder: "short-name (lowercase, no spaces)", "aria-label": "Short name for the address" });
@@ -1205,7 +1205,7 @@ async function save() {
         const body = { name: ($("save-name") && $("save-name").value.trim()) || lastPreview.name || "My resume", resume_yaml: yamlText };
         if (me.is_admin) {
           body.slug = $("save-slug").value.trim();
-          body.published = false; // never public by accident; publishing is a deliberate step on the People page
+          body.published = false; // never public by accident; publishing is a deliberate step on the Resumes page
         }
         saved = await Global.fetchJSON("/api/people", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
       }

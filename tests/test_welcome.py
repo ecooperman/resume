@@ -51,12 +51,15 @@ def test_the_front_page_is_start_here_and_the_resumes_page_moved_to_its_own_addr
         who = person(email)
         front, start, resumes = who.get("/").text, who.get("/welcome.html").text, who.get("/people.html").text
         assert front == start and "Start here" in front and "The big picture" in front  # the front page IS the Start here page
-        assert "The big picture" not in resumes and "Each person's resume lives here" in resumes  # the resumes page is the old front page
+        assert "The big picture" not in resumes and "Each resume lives here" in resumes  # the resumes page is the old front page
 
 
 def test_the_menu_has_start_here_first_pointing_at_the_front_page_and_people_at_its_new_address(person, people):
     nav = person("bob@example.com").get("/nav.js").text
     assert nav.index("Start here") < nav.index("My resume")
+    # the pages used every day come first; the resume page itself (download, edit, delete) comes after them
+    assert nav.index('label: "Build my resume"') < nav.index('label: "Jobs"') < nav.index('"Resumes" : "My resume"') < nav.index('label: "Invites"')
+    assert '"Resumes" : "My resume"' in nav and '"People" : "My resume"' not in nav
     assert 'href: "/", icon: "compass"' in nav and 'href: "/people.html"' in nav
     assert "resume-welcome-seen" not in nav + person("bob@example.com").get("/people.js").text + person("bob@example.com").get("/welcome.js").text  # no first-visit redirect any more
 

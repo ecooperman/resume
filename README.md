@@ -16,7 +16,7 @@ app/
   models.py, crud.py      <- access_codes, people, accounts and the builder's tables (SQLAlchemy)
   generate.py, builder.py <- the resume builder: reading uploads, the Claude call, stored files/engagements/notes/draft
   apikeys.py, limits.py   <- each person's own Anthropic key (encrypted) and the drafts-per-hour allowance
-admin_templates/           <- the admin pages (Build my resume, People, Access codes, Users), Jinja2 so the shared-assets URL is baked in
+admin_templates/           <- the admin pages (Start here, Build my resume, Jobs, Resumes, Access codes, Users), Jinja2 so the shared-assets URL is baked in
 admin_static/              <- their no-build-step JS and the little CSS that is specific to this app (served by app/admin.py)
 manage.py                 <- CLI alternative to the admin panel
 migrations/                <- Alembic, same pattern as the other apps here
@@ -70,7 +70,7 @@ lets people in on the Users page or the dashboard's People page), every resume a
 - **Start here** (the FRONT PAGE `/`, also `/welcome.html`; `admin_templates/welcome.html`, `admin_static/welcome.js`): the intro screen for everyone with an account, first in the menu, and the page `jobs.evancooperman.com`
   opens on (administrators too). It explains the whole process in order (Anthropic key, build a resume, the optional Chrome extension, collecting jobs, scoring, tailoring, tracking), what it costs and who can see
   what. The words are static HTML; a "Where you are" box and a done / to do mark on each step are filled from what the person actually has (`/api/api-key`, `/api/people`, `/api/tokens`, `/api/jobs`), and it names
-  the one next thing to do. The resumes page (People for an administrator, My resume for everyone else) moved to `/people.html`. The copy deliberately never names the app ("this app", page names), so renaming
+  the one next thing to do. The resumes page (called Resumes in an administrator's menu and My resume in everyone else's, after Build my resume and Jobs) is at `/people.html`; the code, the table and the API still call a resume a "person" (`/api/people`, `Person`). The copy deliberately never names the app ("this app", page names), so renaming
   resume to jobs does not date it. `tests/test_welcome.py` also checks every link on it resolves.
 - **Pushing jobs from the Chrome extension** (`app/push.py`, `app/tokens.py`, table `push_tokens`): a signed-in person makes a personal token on the Jobs page ("Connect the Chrome
   extension"; shown once, only its SHA-256 kept, up to 10, removing one revokes it). The extension sends `Authorization: Bearer <token>` to `POST /api/push/jobs`

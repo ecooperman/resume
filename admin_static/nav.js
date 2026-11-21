@@ -12,9 +12,10 @@ const header = Global.mountUserBadge && Global.mountUserBadge();
   }
   window.RESUME_ME = me;
   const items = [{ href: "/", icon: "compass", label: "Start here", active: path === "/" || path === "/welcome.html" }];
-  items.push({ href: "/people.html", icon: "person", label: me.is_admin ? "People" : "My resume", active: path === "/people.html" });
   items.push({ href: "/build.html", icon: "zap", label: "Build my resume", active: path === "/build.html" });
   items.push({ href: "/jobs.html", icon: "briefcase", label: "Jobs", active: path === "/jobs.html" || path === "/extension.html" });
+  // The resume itself (download, edit the text, delete; for an administrator, several resumes, the public default and publishing) is rarely needed, so it comes after the pages used every day.
+  items.push({ href: "/people.html", icon: "person", label: me.is_admin ? "Resumes" : "My resume", active: path === "/people.html" });
   items.push({
     href: "/invites.html", icon: "mail", label: "Invites", active: path === "/invites.html",
     badge: me.is_admin ? { id: "nav-invite-count", count: me.pending_invites || 0 } : null, // how many requests wait for an administrator

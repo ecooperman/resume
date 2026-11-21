@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>People · Resume admin</title>
+  <title>Resumes · Resume</title>
   <link rel="stylesheet" href="{{ shared_assets_base }}/theme.css">
   <script src="{{ shared_assets_base }}/theme-init.js"></script>
   <link rel="stylesheet" href="/style.css?v={{ asset_v('style.css') }}">
 </head>
 <body>
   <header class="app-header">
-    <h1>People</h1>
-    <p class="subtitle">Each person's resume lives here - never a file, never in git, and private to whoever owns it. For administrators: the default person is who the public site shows, and only a published person can be seen on the public site.</p>
+    <h1>Resumes</h1>
+    <p class="subtitle">Each resume lives here - never a file, never in git, and private to whoever owns it. For administrators: the default resume is the one the public site shows, and only a published resume can be seen on the public site.</p>
   </header>
 
   <div id="app-nav-mount"></div>
@@ -19,7 +19,7 @@
   <main>
     <div id="page-message" class="page-message hidden"></div>
 
-    <button id="show-add-person" type="button" class="add-toggle">+ Add Person</button>
+    <button id="show-add-person" type="button" class="add-toggle">+ Add a resume</button>
 
     <form id="add-person-form" class="add-card hidden">
       <div class="field-row">
@@ -45,7 +45,7 @@
         <label for="person-published">Show on the public site</label>
       </div>
       <div class="item-actions">
-        <button type="submit" class="save-btn">Add person</button>
+        <button type="submit" class="save-btn">Add resume</button>
         <button type="button" id="cancel-add-person" class="cancel-btn">Cancel</button>
       </div>
     </form>
@@ -54,11 +54,11 @@
 
     <section>
       <div class="list-header">
-        <h2 id="people-title">People</h2>
+        <h2 id="people-title">Resumes</h2>
         <span id="people-count" class="list-count"></span>
       </div>
       <div id="people-list" class="item-list"></div>
-      <p id="people-empty" class="empty-state" hidden>No one set up yet - add someone above.</p>
+      <p id="people-empty" class="empty-state" hidden>No resumes yet - add one above.</p>
     </section>
   </main>
 

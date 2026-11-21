@@ -1,4 +1,4 @@
-// The People page: each person as an accordion card (their resume YAML inside), plus the forms
+// The Resumes page (My resume for everyone but an administrator; the file is still people.js): each resume as an accordion card (their resume YAML inside), plus the forms
 // for adding someone (drafting one from documents is the Build my resume page, build.js). Needs Global (shared-assets).
 
 const PEOPLE_API = "/api/people";

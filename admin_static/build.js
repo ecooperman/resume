@@ -962,7 +962,9 @@ async function refreshPreview() {
 }
 
 // Quick rule-based suggestions (the server sends them with every preview) and, on request, an AI editor's. Neither changes the draft.
+let quickSuggestions = []; // what the quick checks last said, kept so "Copy suggestions" can include them
 function renderSuggestions(list) {
+  quickSuggestions = list;
   $("feedback-box").classList.remove("hidden");
   const host = $("suggestions");
   if (!list.length) {
@@ -984,6 +986,32 @@ function renderSuggestions(list) {
   );
 }
 
+// Everything now on screen (the quick checks, then the AI review if there is one) as plain text to paste into a message or note.
+function suggestionsText() {
+  const lines = [];
+  if (quickSuggestions.length) {
+    lines.push("Quick checks", ...quickSuggestions.map((s) => `- ${s.level === "fix" ? "Fix" : "Tip"} - ${s.where}: ${s.text}`));
+  }
+  if (aiReview && aiReview.suggestions.length) {
+    if (lines.length) lines.push("");
+    lines.push("AI review", ...aiReview.suggestions.flatMap((s) => [`- ${s.where}: ${s.issue}`, ...(s.suggestion ? [`  Suggestion: ${s.suggestion}`] : [])]));
+  }
+  return lines.join("\n");
+}
+
+async function copySuggestions() {
+  const text = suggestionsText();
+  if (!text) {
+    Global.showMessage("There are no suggestions to copy yet.", "error");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    Global.showMessage("Suggestions copied.", "success");
+  } catch (err) {
+    Global.showMessage("Couldn't copy automatically. Select the suggestions and press Ctrl+C (or Cmd+C).", "error");
+  }
+}
 // A suggestion that can be clicked (or reached with the keyboard) to show the words it is about in the YAML box.
 function clickable(item, finds, nth = 0) {
   item.classList.add("jumps");
@@ -1251,6 +1279,7 @@ async function start() {
   $("save-btn").addEventListener("click", save);
   $("discard-btn").addEventListener("click", discardDraft);
   $("review-btn").addEventListener("click", reviewWithAI);
+  $("copy-suggestions").addEventListener("click", copySuggestions);
   $("keep-files").addEventListener("change", changeKeep);
   $("draft-yaml").addEventListener("input", () => {
     clearTimeout(previewTimer);

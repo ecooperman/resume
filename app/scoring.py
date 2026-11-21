@@ -10,7 +10,6 @@ the system key where that applies. One account has at most one queue; more jobs 
 import logging
 import threading
 import time
-from datetime import datetime
 from typing import Dict, List, Optional
 
 import yaml
@@ -18,7 +17,7 @@ from fastapi import HTTPException
 from shared_python import owned
 from shared_python.accounts_gate import Account
 
-from . import apikeys, config, crud, generate, limits, models
+from . import apikeys, clock, config, crud, generate, limits, models
 from .database import SessionLocal
 
 log = logging.getLogger(__name__)
@@ -86,7 +85,7 @@ def score_one(db, account: Account, job: models.Job) -> models.Job:
         setattr(job, field, result[field] or None)
     if result["salary"]:
         job.salary = result["salary"]
-    job.scored_at = datetime.utcnow()
+    job.scored_at = clock.utcnow()
     db.commit()
     db.refresh(job)
     return job

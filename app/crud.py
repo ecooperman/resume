@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
-from . import config, models
+from . import clock, config, models
 from .database import SessionLocal
 
 
@@ -182,7 +182,7 @@ def generate_code(
     all (matches build.py's own bootstrapping tolerance) - callers should
     otherwise always pass one, defaulting to the current default person
     when the caller (admin UI, manage.py) doesn't ask for someone specific."""
-    expires_at = datetime.utcnow() + timedelta(days=days_valid) if days_valid else None
+    expires_at = clock.utcnow() + timedelta(days=days_valid) if days_valid else None
     access_code = models.AccessCode(
         code=secrets.token_urlsafe(24),
         label=label,
@@ -205,7 +205,7 @@ def get_valid_code(db: Session, code: str) -> Optional[models.AccessCode]:
         return None
     if row.revoked_at is not None:
         return None
-    if row.expires_at is not None and row.expires_at < datetime.utcnow():
+    if row.expires_at is not None and row.expires_at < clock.utcnow():
         return None
     return row
 
@@ -214,7 +214,7 @@ def touch_code(db: Session, access_code: models.AccessCode) -> None:
     """Record that a valid code was just used (view or download)."""
     with owned.unscoped():
         access_code.use_count += 1
-        access_code.last_used_at = datetime.utcnow()
+        access_code.last_used_at = clock.utcnow()
         db.commit()
 
 
@@ -222,7 +222,7 @@ def revoke_code(db: Session, code_or_id: str) -> Optional[models.AccessCode]:
     row = _find(db, code_or_id)
     if row is None or row.revoked_at is not None:
         return None
-    row.revoked_at = datetime.utcnow()
+    row.revoked_at = clock.utcnow()
     db.commit()
     db.refresh(row)
     return row
@@ -468,7 +468,7 @@ def push_jobs(db: Session, items: list, person_id: Optional[int] = None) -> dict
             existing.tier = tier
             for field, limit in (("summary", 5000), ("matched", 8000), ("gaps", 8000), ("strengths", 8000)):
                 setattr(existing, field, _clean(item.get(field), limit))
-            existing.scored_at = datetime.utcnow()
+            existing.scored_at = clock.utcnow()
             if salary:
                 existing.salary = salary
         touched.append(existing)
@@ -519,7 +519,7 @@ def user_for_token(db: Session, raw: str, extension_version: Optional[str] = Non
     row = db.query(models.PushToken).filter(models.PushToken.token_hash == hash_token(raw)).first()
     if row is None:
         return None
-    now = datetime.utcnow()
+    now = clock.utcnow()
     changed = bool(extension_version) and extension_version != row.extension_version
     if changed:
         row.extension_version = extension_version
@@ -533,7 +533,7 @@ def user_for_token(db: Session, raw: str, extension_version: Optional[str] = Non
 
 
 def _month_start(now: Optional[datetime] = None) -> datetime:
-    now = now or datetime.utcnow()
+    now = now or clock.utcnow()
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
@@ -618,7 +618,7 @@ def pending_invite_count(db: Session) -> int:
 
 def decide_invite(db: Session, invite, status: str):
     invite.status = status
-    invite.decided_at = datetime.utcnow()
+    invite.decided_at = clock.utcnow()
     db.commit()
     return invite
 
@@ -662,7 +662,7 @@ def new_message_count(db: Session) -> int:
 
 
 def set_message_done(db: Session, message, done: bool):
-    message.done_at = datetime.utcnow() if done else None
+    message.done_at = clock.utcnow() if done else None
     db.commit()
     return message
 

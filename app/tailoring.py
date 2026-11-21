@@ -8,7 +8,6 @@ generated_cover_letter, resume_generated_at) only when the whole thing worked, s
 import logging
 import threading
 import time
-from datetime import datetime
 from typing import Dict, Optional, Tuple
 
 import yaml
@@ -16,7 +15,7 @@ from fastapi import HTTPException
 from shared_python import owned
 from shared_python.accounts_gate import Account
 
-from . import apikeys, config, crud, generate, limits
+from . import apikeys, clock, config, crud, generate, limits
 from .database import SessionLocal
 from .scoring import resume_for
 
@@ -89,7 +88,7 @@ def start(db, account: Account, job) -> dict:
                     raise generate.ResumeGenerationError("That job was deleted while its resume was being made.")
                 saved.generated_resume_yaml = yaml.safe_dump(tailored, sort_keys=False, allow_unicode=True)
                 saved.generated_cover_letter = letter
-                saved.resume_generated_at = datetime.utcnow()
+                saved.resume_generated_at = clock.utcnow()
                 session.commit()
             outcome = {"state": "done"}
         except generate.ResumeGenerationError as e:

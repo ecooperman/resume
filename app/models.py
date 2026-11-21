@@ -1,9 +1,9 @@
-from datetime import datetime
 
 from shared_python import owned
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
+from . import clock
 from .database import Base
 
 USER_ACTIVE = "active"
@@ -24,7 +24,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     email = Column(String, unique=True, nullable=False)
     status = Column(String, nullable=False, default=USER_ACTIVE, server_default=USER_ACTIVE)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=clock.utcnow)
     # An administrator's decision: this person may use the SERVER's Anthropic key (up to config.HOUSE_KEY_CALLS_PER_MONTH runs a month)
     # when they have not saved a key of their own. Off by default: nobody else ever uses it.
     house_key = Column(Boolean, nullable=False, default=False, server_default="0")
@@ -43,7 +43,7 @@ class HouseKeyUse(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     kind = Column(String, nullable=False)  # draft | import | review | score | tailor
-    at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    at = Column(DateTime, default=clock.utcnow, nullable=False, index=True)
     input_tokens = Column(Integer, nullable=True)
     output_tokens = Column(Integer, nullable=True)
 
@@ -60,7 +60,7 @@ class Invite(Base):
     email = Column(String, nullable=False, unique=True)  # lowercased
     invited_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     status = Column(String, nullable=False, default=INVITE_PENDING, server_default=INVITE_PENDING)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=clock.utcnow)
     decided_at = Column(DateTime, nullable=True)
 
     invited_by = relationship("User")
@@ -81,7 +81,7 @@ class Message(Base):
     kind = Column(String, nullable=False)  # problem | idea | question
     body = Column(Text, nullable=False)
     page = Column(String, nullable=True)  # the page they were on, so "it did not work" says where
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=clock.utcnow, nullable=False)
     done_at = Column(DateTime, nullable=True)  # set when the administrator has dealt with it
 
     user = relationship("User")
@@ -110,8 +110,8 @@ class Person(Base, owned.OwnedMixin):
     # unless an administrator has published it. Everything that existed before accounts was already public, so the
     # migration publishes it; every new person starts unpublished.
     published = Column(Boolean, nullable=False, default=False, server_default="0")
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=clock.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=clock.utcnow, onupdate=clock.utcnow, nullable=False)
 
 
 class Job(Base, owned.OwnedMixin):
@@ -143,8 +143,8 @@ class Job(Base, owned.OwnedMixin):
     generated_resume_yaml = Column(Text, nullable=True)
     generated_cover_letter = Column(Text, nullable=True)
     resume_generated_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=clock.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=clock.utcnow, onupdate=clock.utcnow, nullable=False)
 
 
 class PushToken(Base, owned.OwnedMixin):
@@ -158,7 +158,7 @@ class PushToken(Base, owned.OwnedMixin):
     name = Column(String, nullable=False)  # what the person calls it, e.g. "Laptop Chrome"
     prefix = Column(String, nullable=False)
     token_hash = Column(String, nullable=False, unique=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=clock.utcnow, nullable=False)
     last_used_at = Column(DateTime, nullable=True)
     extension_version = Column(String, nullable=True)  # what the extension last said its version was, so the Jobs page can say an update is out
 
@@ -192,7 +192,7 @@ class AccessCode(Base, owned.OwnedMixin):
     code = Column(String, unique=True, nullable=False, index=True)
     label = Column(String, nullable=True)
     person_id = Column(Integer, ForeignKey("people.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=clock.utcnow, nullable=False)
     expires_at = Column(DateTime, nullable=True)
     revoked_at = Column(DateTime, nullable=True)
     last_used_at = Column(DateTime, nullable=True)
@@ -211,7 +211,7 @@ class UserApiKey(Base, owned.OwnedMixin):
     provider = Column(String, nullable=False)
     encrypted_key = Column(Text, nullable=False)
     last4 = Column(String, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=clock.utcnow, onupdate=clock.utcnow, nullable=False)
 
 
 class Engagement(Base, owned.OwnedMixin):
@@ -237,8 +237,8 @@ class Engagement(Base, owned.OwnedMixin):
     outcomes = Column(Text, nullable=False, default="[]", server_default="[]")  # a JSON list of short statements
     confidential = Column(Boolean, nullable=False, default=False, server_default="0")  # do not name the client on anything printed
     position = Column(Integer, nullable=False, default=0, server_default="0")
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=clock.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=clock.utcnow, onupdate=clock.utcnow, nullable=False)
 
 
 class BuilderNotes(Base, owned.OwnedMixin):
@@ -253,7 +253,7 @@ class BuilderNotes(Base, owned.OwnedMixin):
     # Their choice (on by default) of whether the builder keeps the text of their files and their unsaved draft. Off means nothing from
     # a file is stored: it is held in their browser for the draft and a refresh starts them over.
     keep_files = Column(Boolean, nullable=False, default=True, server_default="1")
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=clock.utcnow, onupdate=clock.utcnow, nullable=False)
 
 
 class SourceFile(Base, owned.OwnedMixin):
@@ -270,7 +270,7 @@ class SourceFile(Base, owned.OwnedMixin):
     found = Column(Text, nullable=False, default="{}", server_default="{}")  # JSON: {"Positions": 3, ...} for LinkedIn data
     summary = Column(String, nullable=False, default="", server_default="")
     size_bytes = Column(Integer, nullable=False, default=0, server_default="0")  # of the original upload, for display
-    added_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    added_at = Column(DateTime, default=clock.utcnow, nullable=False)
 
 
 class BuilderDraft(Base, owned.OwnedMixin):
@@ -283,4 +283,4 @@ class BuilderDraft(Base, owned.OwnedMixin):
     id = Column(Integer, primary_key=True)
     resume_yaml = Column(Text, nullable=False, default="", server_default="")
     person_id = Column(Integer, nullable=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=clock.utcnow, onupdate=clock.utcnow, nullable=False)

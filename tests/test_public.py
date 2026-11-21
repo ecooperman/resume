@@ -2,11 +2,11 @@
 only a resume an administrator PUBLISHED can ever be shown here, by name, by default, or through an access code, and the
 public page never shows contact details. These tests plant a private resume and try every way to reach it."""
 import re
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
-from app import crud, models
+from app import clock, crud, models
 from tests.conftest import resume_yaml
 
 
@@ -145,7 +145,7 @@ def test_revoked_expired_and_made_up_codes_fall_back_to_the_public_page(public, 
     with as_user(world["admin_id"]) as s:
         crud.revoke_code(s, revoked)
         row = s.query(models.AccessCode).filter(models.AccessCode.code == expired).first()
-        row.expires_at = datetime.utcnow() - timedelta(days=1)
+        row.expires_at = clock.utcnow() - timedelta(days=1)
         s.commit()
     for code in (revoked, expired, "made-up"):
         resp = public.get(path, params={"code": code})

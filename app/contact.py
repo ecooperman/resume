@@ -11,7 +11,7 @@ from shared_python import accounts_gate
 from shared_python.accounts_gate import Account
 from sqlalchemy.orm import Session
 
-from . import crud, models, notify
+from . import clock, crud, models, notify
 from .deps import get_db
 
 MAX_PER_DAY = 10
@@ -62,7 +62,7 @@ def send_message(body: MessageIn, background: BackgroundTasks, account: Account 
         raise HTTPException(status_code=400, detail="Write a few words first.")
     if len(text) > MAX_BODY:
         raise HTTPException(status_code=400, detail=f"That message is {len(text):,} characters; the limit is {MAX_BODY:,}. Please shorten it.")
-    if crud.messages_sent_since(db, account.id, datetime.utcnow() - timedelta(days=1)) >= MAX_PER_DAY:
+    if crud.messages_sent_since(db, account.id, clock.utcnow() - timedelta(days=1)) >= MAX_PER_DAY:
         raise HTTPException(status_code=429, detail=f"You have sent {MAX_PER_DAY} messages today. Please try again tomorrow, or add to your last one by email.")
     message = crud.create_message(db, account.id, kind, text, _page(body.page))
     background.add_task(notify.feedback_received, account.email, KIND_LABELS[kind], text)

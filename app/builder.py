@@ -6,13 +6,12 @@ Every text field is cut to a sensible length and cleaned of control characters; 
 routes are in app/admin.py; this module is the validation and the way the rows become the plain dicts the drafting code reads."""
 import json
 import re
-from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from . import generate, models
+from . import clock, generate, models
 
 MAX_ENGAGEMENTS = 60
 MAX_TEXT = 300
@@ -256,7 +255,7 @@ def save_draft(db: Session, resume_yaml: str, person_id: Optional[int]) -> model
         db.add(row)
     row.resume_yaml = resume_yaml
     row.person_id = person_id
-    row.updated_at = datetime.utcnow()
+    row.updated_at = clock.utcnow()
     db.commit()
     db.refresh(row)
     return row

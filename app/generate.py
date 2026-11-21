@@ -254,6 +254,8 @@ Rules:
   company, keep them as two separate jobs, each with its own dates, and never stretch a later job's start back to the earlier
   one's (to leave the earlier one off the printed resume, set include_in_resume: false on it and leave the dates alone). A job the
   sources show as current, with no end date, gets `end: Present`. Never write an end date that is not in the sources.
+  You are told today's date at the top of the sources: a date up to and including today is in the past or the present (never treat a recent
+  start date as a mistake, and never change a date only because it looks recent), and only a date after today is in the future.
 - The person's own notes and the engagements they described are the most reliable sources. When one of them corrects something in
   the LinkedIn data or an old resume (an end date, a title, a company name), follow the correction, and do not repeat the old value.
 - Copy numbers and statistics exactly as the sources state them, and add no qualifier they do not (do not turn "over 60" into "all",
@@ -356,7 +358,7 @@ def _build_user_message(
         parts.append("=== Extra notes from the person ===\n" + notes.strip())
     if not [p for p in parts if not p.startswith("=== Their current resume.yaml")]:
         raise ResumeGenerationError("No source material provided - upload a LinkedIn export and/or a document first.")
-    text = "\n\n".join(parts)
+    text = f"Today's date is {date.today().isoformat()}.\n\n" + "\n\n".join(parts)  # so a current job and a recent date are judged against today
     if len(text) > MAX_PROMPT_CHARS:
         raise ResumeGenerationError("That's too much text to draft from in one go. Remove a document or two and try again.")
     return text

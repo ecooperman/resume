@@ -680,6 +680,18 @@ def test_page_scripts_carry_a_version_so_a_deploy_is_never_hidden_by_a_stale_cac
         assert f"/{name}?v=" in page and f"/{name}?v=0" not in page  # versioned, and the file was found
 
 
+def test_the_drafting_message_starts_with_todays_date_and_the_prompt_says_how_to_use_it():
+    from datetime import date
+
+    message = generate._build_user_message("A LinkedIn export", [], None)
+    assert message.startswith(f"Today's date is {date.today().isoformat()}.")
+    assert "=== LinkedIn profile export ===" in message
+    prompt = " ".join(generate._build_system_prompt().split())
+    assert "told today's date" in prompt and "only a date after today is in the future" in prompt
+    with pytest.raises(generate.ResumeGenerationError):  # the date alone is not source material
+        generate._build_user_message(None, [], None)
+
+
 def test_the_drafting_prompt_keeps_dates_exact_and_engagements_to_what_the_person_said():
     prompt = " ".join(generate._build_system_prompt().split())  # line breaks in the prompt text do not matter
     assert "never stretch a later job's start" in prompt and "end: Present" in prompt  # a promotion is two jobs, each with its own dates

@@ -11,7 +11,7 @@ from typing import Dict, Optional
 
 from sqlalchemy.orm import Session
 
-from . import config, crud, models
+from . import clock, config, crud, models
 
 TEXT_LIMITS = {"name": 300, "company": 300, "company_url": 2000, "url": 2000, "salary": 300, "tier": 40, "summary": 5000, "matched": 8000, "gaps": 8000,
                "strengths": 8000, "jd_text": config.MAX_JD_CHARS}
@@ -79,7 +79,7 @@ def import_jobs(db: Session, path: str, owner_email: str, dry_run: bool = False)
         if room <= 0:
             over_limit += 1
             continue
-        db.add(models.Job(applied=bool(old.get("applied")), person_id=person_id, created_at=_when(old.get("created_at")) or datetime.utcnow(),
+        db.add(models.Job(applied=bool(old.get("applied")), person_id=person_id, created_at=_when(old.get("created_at")) or clock.utcnow(),
                           **{k: v for k, v in values.items()}))
         room -= 1
         created += 1

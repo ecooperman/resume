@@ -29,7 +29,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from . import access, apikeys, builder, config, contact, crud, drafts, extension, feedback, generate, invites, jobs, limits, push, render, stats, tokens, users
+from . import access, apikeys, builder, clock, config, contact, crud, drafts, extension, feedback, generate, invites, jobs, limits, push, render, stats, tokens, users
 from .database import SessionLocal
 from .deps import get_db
 
@@ -767,7 +767,7 @@ class CodeOut(BaseModel):
 def _status(access_code) -> str:
     if access_code.revoked_at is not None:
         return "revoked"
-    if access_code.expires_at is not None and access_code.expires_at < datetime.utcnow():
+    if access_code.expires_at is not None and access_code.expires_at < clock.utcnow():
         return "expired"
     return "active"
 

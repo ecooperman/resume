@@ -1,7 +1,6 @@
 """The numbers the dashboard's stats pages read: administrators only, counts and dates only, everyone's accounts."""
-from datetime import datetime
 
-from app import models
+from app import clock, models
 from app.database import SessionLocal
 from shared_python import owned
 from tests.test_accounts import ADMIN, key, people, person, production  # noqa: F401 - fixtures
@@ -31,4 +30,4 @@ def test_the_gate_notes_when_a_person_was_last_seen(person, people):
     assert bob.get("/api/me").status_code == 200
     with owned.unscoped(), SessionLocal() as db:
         user = db.query(models.User).filter(models.User.email == "bob@example.com").one()
-        assert user.active_days == 1 and user.last_seen_at is not None and (datetime.utcnow() - user.last_seen_at).total_seconds() < 60
+        assert user.active_days == 1 and user.last_seen_at is not None and (clock.utcnow() - user.last_seen_at).total_seconds() < 60

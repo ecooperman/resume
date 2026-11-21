@@ -31,12 +31,11 @@ database it was created in.
 """
 import argparse
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from shared_python import owned
 
-from app import config, crud, models
+from app import clock, config, crud, models
 from app.database import SessionLocal
 
 SITE_URL = "https://resume.evancooperman.com"
@@ -86,7 +85,7 @@ def cmd_list(args):
         for c in codes:
             if c.revoked_at:
                 status = f"revoked {c.revoked_at:%Y-%m-%d}"
-            elif c.expires_at and c.expires_at < datetime.utcnow():
+            elif c.expires_at and c.expires_at < clock.utcnow():
                 status = f"expired {c.expires_at:%Y-%m-%d}"
             else:
                 status = "active"

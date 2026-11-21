@@ -13,7 +13,7 @@ Revises: ad0a7ca7e069
 Create Date: 2026-11-17 18:00:00.000000
 
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -43,7 +43,7 @@ def upgrade() -> None:
     conn = op.get_bind()
     conn.execute(
         sa.text("INSERT INTO users (email, status, created_at) VALUES (:email, 'active', :now)"),
-        {"email": LEGACY_OWNER_EMAIL, "now": datetime.utcnow()},
+        {"email": LEGACY_OWNER_EMAIL, "now": datetime.now(timezone.utc).replace(tzinfo=None)},
     )
     legacy_id = conn.execute(sa.text("SELECT id FROM users WHERE email = :e"), {"e": LEGACY_OWNER_EMAIL}).scalar()
 

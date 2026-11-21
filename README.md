@@ -275,7 +275,7 @@ names, and regardless of who's currently the default person. A code's own
 link is just `?code=<token>` - no `?person=` needed, since the code already
 says who it's for.
 
-**Admin panel** (day-to-day way to manage codes): `jobs.evancooperman.com` (renamed from `resume-admin.evancooperman.com` on 2026-11-20, which still works as an alias),
+**Admin panel** (day-to-day way to manage codes): `jobs.evancooperman.com` (renamed from `resume-admin.evancooperman.com` on 2026-11-20; in production a browser visit to the old address is redirected here (`app/server.py` `legacy_redirect`, `LEGACY_ADMIN_HOSTS`) while its `/api/...` calls still work for extensions installed before 0.3.2),
 behind the dashboard sign-in like the other apps. Pick who a
 new code is for, create it, copy the shareable link, and revoke, all from
 the browser - no SSH needed.

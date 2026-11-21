@@ -38,8 +38,29 @@ async def _both_lifespans(_app):
 _root = FastAPI(lifespan=_both_lifespans)  # serves nothing itself: it only carries the lifespan for the two apps below
 
 
+def legacy_redirect(scope):
+    """Where a browser visit to an OLD admin address should go instead (same path and query on the new address), or None to carry on as normal.
+    Only in production, only GET and HEAD, and never for /api/...: a Chrome extension installed before the rename still sends its postings to the
+    old address, and a tab left open there still makes its own API calls, so those keep working where they are."""
+    if config.ENV != "production" or scope["type"] != "http" or scope.get("method") not in ("GET", "HEAD"):
+        return None
+    if request_host(scope) not in config.LEGACY_ADMIN_HOSTS:
+        return None
+    path = scope.get("path") or "/"
+    if path == "/api" or path.startswith("/api/"):
+        return None
+    raw = (scope.get("raw_path") or path.encode()).decode("latin-1").split("?", 1)[0]  # as the browser sent it, still percent-encoded
+    query = scope.get("query_string") or b""
+    return config.ADMIN_PUBLIC_URL.rstrip("/") + raw + ("?" + query.decode("latin-1") if query else "")
+
+
 async def app(scope, receive, send):
     """The ASGI entry point (`uvicorn app.server:app`)."""
+    target = legacy_redirect(scope)
+    if target is not None:
+        await send({"type": "http.response.start", "status": 302, "headers": [(b"location", target.encode("latin-1")), (b"cache-control", b"no-store"), (b"content-length", b"0")]})
+        await send({"type": "http.response.body", "body": b""})
+        return
     if scope["type"] in ("http", "websocket"):
         target = admin.app if request_host(scope) in config.ADMIN_HOSTS else main.app
         await target(scope, receive, send)

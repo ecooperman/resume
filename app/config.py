@@ -41,6 +41,10 @@ if ENV != "production":
 # admin app at jobs.localhost:8040 (or resume-admin.localhost:8040). The PUBLIC hostname (resume.evancooperman.com) must never be in this list.
 DEFAULT_ADMIN_HOSTS = ("jobs.evancooperman.com", "resume-admin.evancooperman.com", "jobs.localhost", "resume-admin.localhost")
 ADMIN_HOSTS = {h.strip().lower() for h in os.environ.get("RESUME_ADMIN_HOSTS", ",".join(DEFAULT_ADMIN_HOSTS)).split(",") if h.strip()}
+# Old admin addresses that should send people to the new one: in production a browser VISIT to one of these (GET or HEAD, anything but /api/...) is redirected to
+# ADMIN_PUBLIC_URL, so old bookmarks, emails and tabs move over. Their /api/ calls are NOT redirected and still work, because Chrome extensions installed before 0.3.2
+# send their postings to the old address. (Cloudflare Access must let the visit reach the app for this to happen: see DEPLOYMENT.md "The jobs hostname".)
+LEGACY_ADMIN_HOSTS = {h.strip().lower() for h in os.environ.get("RESUME_LEGACY_HOSTS", "resume-admin.evancooperman.com").split(",") if h.strip()}
 
 # The server's own Anthropic key (above) is for administrators. An administrator may also let particular people fall back to it when they
 # have no key of their own (the Users page). By default that is unlimited; set HOUSE_KEY_CALLS_PER_MONTH to give each of them that many AI runs a

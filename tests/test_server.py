@@ -99,3 +99,61 @@ def test_both_the_new_and_the_old_address_reach_the_admin_app_and_the_public_hos
         assert got.status_code in (302, 401, 403), (host, got.status_code)  # the admin app's own sign-in gate answered
     got = client("resume.evancooperman.com").get("/api/people", headers={"host": "resume.evancooperman.com"})
     assert got.status_code == 404  # the public site has no such route at all
+
+
+# --- the old admin address sends browser visits to the new one, and leaves API calls alone --------------------------------------------------------
+
+
+OLD, NEW = "resume-admin.evancooperman.com", "jobs.evancooperman.com"
+
+
+@pytest.fixture()
+def live(monkeypatch):
+    """Production, with the shipped hostnames."""
+    monkeypatch.setattr(config, "ENV", "production")
+    monkeypatch.setattr(config, "ADMIN_PUBLIC_URL", f"https://{NEW}")
+    monkeypatch.setattr(config, "ADMIN_HOSTS", set(config.DEFAULT_ADMIN_HOSTS))
+    monkeypatch.setattr(config, "LEGACY_ADMIN_HOSTS", {OLD})
+
+
+def visit(host, path, method="GET", **kw):
+    return client(host).request(method, path, headers={"host": host}, **kw)
+
+
+@pytest.mark.parametrize("path,query,expected", [
+    ("/", "", "/"), ("/jobs.html", "", "/jobs.html"), ("/build.html", "x=1&y=a%20b", "/build.html?x=1&y=a%20b"),
+    ("/extension.html", "", "/extension.html"), ("/style.css", "v=3", "/style.css?v=3"), ("/a%20b/c", "", "/a%20b/c"),
+])
+def test_a_visit_to_the_old_address_goes_to_the_same_page_on_the_new_one(live, path, query, expected):
+    got = visit(OLD, path + (f"?{query}" if query else ""))
+    assert got.status_code == 302 and got.headers["location"] == f"https://{NEW}{expected}"
+    assert got.headers["cache-control"] == "no-store"  # not remembered by the browser, so it can be changed later
+
+
+def test_the_old_address_still_answers_api_calls_so_extensions_installed_before_the_rename_keep_working(live):
+    for path in ("/api/push/ping", "/api/push/jobs", "/api/people", "/api/me", "/api"):
+        got = visit(OLD, path)
+        assert got.status_code != 302, path
+    assert visit(OLD, "/api/push/ping").status_code == 401  # the push door itself answered: no token
+    assert visit(OLD, "/api/push/ping", method="OPTIONS").status_code == 204  # and the preflight the extension sends first
+
+
+def test_only_visits_are_redirected_not_posts_or_other_methods(live):
+    for method in ("POST", "PUT", "DELETE", "PATCH"):
+        assert visit(OLD, "/build.html", method=method, json={}).status_code != 302, method
+    assert visit(OLD, "/build.html", method="HEAD").status_code == 302
+
+
+def test_the_new_address_the_public_site_and_local_development_are_never_redirected(live, monkeypatch):
+    for path in ("/", "/jobs.html"):
+        loc = visit(NEW, path).headers.get("location", "")
+        assert loc != f"https://{NEW}{path}" and OLD not in loc, (path, loc)  # no loop: at most the sign-in redirect, never back to itself or to the old address
+    assert visit("resume.evancooperman.com", "/").status_code != 302
+    monkeypatch.setattr(config, "ENV", "local")
+    assert visit(OLD, "/jobs.html").status_code != 302  # development: no redirect
+
+
+def test_a_made_up_path_cannot_steer_the_redirect_to_another_site(live):
+    for path in ("//evil.example.com/x", "/\\evil.example.com", "/%2F%2Fevil.example.com"):
+        loc = visit(OLD, path).headers.get("location", "")
+        assert loc.startswith(f"https://{NEW}/"), (path, loc)  # always on the new address, whatever the path looks like

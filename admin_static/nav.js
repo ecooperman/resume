@@ -20,6 +20,10 @@ const header = Global.mountUserBadge && Global.mountUserBadge();
     href: "/invites.html", icon: "mail", label: "Invites", active: path === "/invites.html",
     badge: me.is_admin ? { id: "nav-invite-count", count: me.pending_invites || 0 } : null, // how many requests wait for an administrator
   });
+  items.push({
+    href: "/contact.html", icon: "help", label: "Send feedback", active: path === "/contact.html",
+    badge: me.is_admin ? { id: "nav-message-count", count: me.new_messages || 0 } : null, // how many messages wait for an administrator
+  });
   if (me.is_admin) {
     items.push({ href: "/codes.html", icon: "lock", label: "Access codes", active: path === "/codes.html" });
     items.push({ href: "/users.html", icon: "users", label: "Users", active: path === "/users.html" });

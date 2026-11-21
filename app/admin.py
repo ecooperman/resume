@@ -29,7 +29,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from . import access, apikeys, builder, config, crud, drafts, extension, feedback, generate, invites, jobs, limits, push, render, tokens, users
+from . import access, apikeys, builder, config, contact, crud, drafts, extension, feedback, generate, invites, jobs, limits, push, render, tokens, users
 from .database import SessionLocal
 from .deps import get_db
 
@@ -46,6 +46,8 @@ app.include_router(jobs.router)
 app.include_router(tokens.router)
 app.include_router(extension.router)
 app.include_router(invites.app_router)
+app.include_router(contact.router)
+app.include_router(contact.app_router)
 templates = Jinja2Templates(directory=str(ADMIN_TEMPLATES_DIR))
 
 
@@ -57,6 +59,7 @@ def get_me(request: Request, account: Account = Depends(accounts_gate.current_ac
           "invites_left": crud.invites_left(db, account.id, account.is_admin)}
     if account.is_admin:
         me["pending_invites"] = crud.pending_invite_count(db)
+        me["new_messages"] = crud.new_message_count(db)
     return me
 
 
@@ -91,6 +94,7 @@ app.get("/users.html", response_class=HTMLResponse)(_page("users.html", admin_on
 app.get("/invites.html", response_class=HTMLResponse)(_page("invites.html"))
 app.get("/jobs.html", response_class=HTMLResponse)(_page("jobs.html"))
 app.get("/extension.html", response_class=HTMLResponse)(_page("extension.html"))
+app.get("/contact.html", response_class=HTMLResponse)(_page("contact.html"))
 
 
 # --- internal-only endpoints, for the time-management app's resume

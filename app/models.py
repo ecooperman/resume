@@ -28,6 +28,9 @@ class User(Base):
     # An administrator's decision: this person may use the SERVER's Anthropic key (up to config.HOUSE_KEY_CALLS_PER_MONTH runs a month)
     # when they have not saved a key of their own. Off by default: nobody else ever uses it.
     house_key = Column(Boolean, nullable=False, default=False, server_default="0")
+    # When they last used the app and on how many different (UTC) days: counts only, kept by shared_python.usage for the dashboard's stats pages.
+    last_seen_at = Column(DateTime, nullable=True)
+    active_days = Column(Integer, nullable=False, default=0, server_default="0")
 
 
 class HouseKeyUse(Base):

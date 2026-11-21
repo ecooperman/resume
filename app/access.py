@@ -20,7 +20,7 @@ import os
 import re
 from typing import Optional, Union
 
-from shared_python import accounts_gate
+from shared_python import accounts_gate, usage
 from shared_python.accounts_gate import Account
 
 from . import config, crud, models
@@ -33,6 +33,7 @@ _INTERNAL_CALLS = (
     ("POST", re.compile(r"^/api/render-cover-letter$")),
 )
 PUBLIC_PATHS = ()  # nothing in the admin app is public
+seen = usage.LastSeen(SessionLocal)  # when each person was last here, for the dashboard's stats pages
 
 
 def account_for(email: str) -> Union[Account, str]:
@@ -70,4 +71,5 @@ def install(app) -> None:
         dev_user_email=config.DEV_USER_EMAIL,
         service_account=internal_call,
         public_paths=PUBLIC_PATHS,
+        seen=seen,
     )

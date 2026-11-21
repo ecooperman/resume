@@ -29,7 +29,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from . import access, apikeys, builder, config, contact, crud, drafts, extension, feedback, generate, invites, jobs, limits, push, render, tokens, users
+from . import access, apikeys, builder, config, contact, crud, drafts, extension, feedback, generate, invites, jobs, limits, push, render, stats, tokens, users
 from .database import SessionLocal
 from .deps import get_db
 
@@ -47,6 +47,7 @@ app.include_router(tokens.router)
 app.include_router(extension.router)
 app.include_router(invites.app_router)
 app.include_router(contact.router)
+app.include_router(stats.router)
 app.include_router(contact.app_router)
 templates = Jinja2Templates(directory=str(ADMIN_TEMPLATES_DIR))
 

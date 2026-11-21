@@ -61,6 +61,14 @@ def clean_db():
 
 
 @pytest.fixture(autouse=True)
+def forget_last_seen():
+    """Who was recorded as last seen is remembered in memory for an hour; the tests empty the database between them but keep ids."""
+    from app import access
+
+    access.seen.reset()
+
+
+@pytest.fixture(autouse=True)
 def site_dir(monkeypatch, tmp_path):
     """Built site files go into a temporary folder, never the real site/."""
     folder = tmp_path / "site"

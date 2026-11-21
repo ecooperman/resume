@@ -1,7 +1,7 @@
 """The Users page: an administrator lets people in, removes them, and deletes a removed person's data.
 
 Only administrators may use any of this (and only administrators can invite). Everyone's resume stays completely private to them
-either way: an administrator cannot read another person's resume through this app, only manage who has an account."""
+either way: an administrator cannot read another person's resume through this app, only manage who has an account and see counts (app/stats.py)."""
 import shutil
 from typing import Literal
 

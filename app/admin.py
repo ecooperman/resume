@@ -75,14 +75,16 @@ def asset_v(name: str) -> str:
 def _page(name: str, admin_only: bool = False):
     def route(request: Request, account: Account = Depends(accounts_gate.current_account)):
         if admin_only and not account.is_admin:
-            return RedirectResponse("/", status_code=302)  # not for them: back to their own resume
+            return RedirectResponse("/", status_code=302)  # not for them: back to the front page (Start here)
         return templates.TemplateResponse(request, name, {"shared_assets_base": config.SHARED_ASSETS_BASE, "asset_v": asset_v})
 
     return route
 
 
-app.get("/", response_class=HTMLResponse)(_page("people.html"))
+# The front page is Start here (what the app does and what to do next); the resumes (People for an administrator, My resume for everyone else) are at /people.html.
+app.get("/", response_class=HTMLResponse)(_page("welcome.html"))
 app.get("/welcome.html", response_class=HTMLResponse)(_page("welcome.html"))
+app.get("/people.html", response_class=HTMLResponse)(_page("people.html"))
 app.get("/build.html", response_class=HTMLResponse)(_page("build.html"))
 app.get("/codes.html", response_class=HTMLResponse)(_page("codes.html", admin_only=True))
 app.get("/users.html", response_class=HTMLResponse)(_page("users.html", admin_only=True))

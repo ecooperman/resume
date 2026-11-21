@@ -1,12 +1,6 @@
 // Start here (welcome.html): the written explanation is static; this adds a live "where you are" box and a done / to do mark on each step, from what the
 // person actually has (a usable key, a saved resume, a token, jobs, scores, tailored documents). Nothing here changes anything. Needs Global (shared-assets).
 
-try {
-  localStorage.setItem("resume-welcome-seen", "1"); // a brand-new person is sent here once from the front page (people.js); having seen it, they are not sent again
-} catch (err) {
-  /* private window or blocked storage: they may be sent here again, which is harmless */
-}
-
 const get = (url) => Global.fetchJSON(url).catch(() => null);
 
 const mark = (name, done, text) => {

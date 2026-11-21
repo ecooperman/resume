@@ -46,9 +46,22 @@ def test_the_wording_does_not_name_the_app_so_a_rename_does_not_date_it(person, 
     assert "resume app" not in text and "jobs app" not in text
 
 
-def test_the_menu_has_start_here_first_and_a_brand_new_person_is_sent_there_once(person, people):
+def test_the_front_page_is_start_here_and_the_resumes_page_moved_to_its_own_address(person, people):
+    for email in ("bob@example.com", "carol@example.com"):
+        who = person(email)
+        front, start, resumes = who.get("/").text, who.get("/welcome.html").text, who.get("/people.html").text
+        assert front == start and "Start here" in front and "The big picture" in front  # the front page IS the Start here page
+        assert "The big picture" not in resumes and "Each person's resume lives here" in resumes  # the resumes page is the old front page
+
+
+def test_the_menu_has_start_here_first_pointing_at_the_front_page_and_people_at_its_new_address(person, people):
     nav = person("bob@example.com").get("/nav.js").text
     assert nav.index("Start here") < nav.index("My resume")
-    front = person("bob@example.com").get("/people.js").text
-    assert "resume-welcome-seen" in front and "/welcome.html" in front
-    assert "resume-welcome-seen" in person("bob@example.com").get("/welcome.js").text  # visiting it is what stops the redirect
+    assert 'href: "/", icon: "compass"' in nav and 'href: "/people.html"' in nav
+    assert "resume-welcome-seen" not in nav + person("bob@example.com").get("/people.js").text + person("bob@example.com").get("/welcome.js").text  # no first-visit redirect any more
+
+
+def test_an_administrator_also_lands_on_start_here_and_still_has_the_resumes_page(person, people):
+    admin_client = person("owner@example.com")
+    assert "The big picture" in admin_client.get("/").text
+    assert admin_client.get("/people.html").status_code == 200

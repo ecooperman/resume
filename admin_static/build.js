@@ -1216,7 +1216,7 @@ async function save() {
       renderMode();
       await clearDraft(); // it is a resume now, no longer a draft
       $("draft-note").classList.add("hidden");
-      $("save-status").replaceChildren(document.createTextNode("Saved. "), el("a", { href: "/", text: "Open my resume" }));
+      $("save-status").replaceChildren(document.createTextNode("Saved. "), el("a", { href: "/people.html", text: "Open my resume" }));
       Global.showMessage("Saved.", "success");
     });
   } catch (err) {

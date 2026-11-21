@@ -11,8 +11,8 @@ const header = Global.mountUserBadge && Global.mountUserBadge();
     /* the page's own requests will say what is wrong */
   }
   window.RESUME_ME = me;
-  const items = [{ href: "/welcome.html", icon: "compass", label: "Start here", active: path === "/welcome.html" }];
-  items.push({ href: "/", icon: "person", label: me.is_admin ? "People" : "My resume", active: path === "/" });
+  const items = [{ href: "/", icon: "compass", label: "Start here", active: path === "/" || path === "/welcome.html" }];
+  items.push({ href: "/people.html", icon: "person", label: me.is_admin ? "People" : "My resume", active: path === "/people.html" });
   items.push({ href: "/build.html", icon: "zap", label: "Build my resume", active: path === "/build.html" });
   items.push({ href: "/jobs.html", icon: "briefcase", label: "Jobs", active: path === "/jobs.html" || path === "/extension.html" });
   items.push({

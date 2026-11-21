@@ -275,7 +275,7 @@ names, and regardless of who's currently the default person. A code's own
 link is just `?code=<token>` - no `?person=` needed, since the code already
 says who it's for.
 
-**Admin panel** (day-to-day way to manage codes): `resume-admin.evancooperman.com`,
+**Admin panel** (day-to-day way to manage codes): `jobs.evancooperman.com` (renamed from `resume-admin.evancooperman.com` on 2026-11-20, which still works as an alias),
 behind the dashboard sign-in like the other apps. Pick who a
 new code is for, create it, copy the shareable link, and revoke, all from
 the browser - no SSH needed.
@@ -285,10 +285,11 @@ the same **process** as the public one (`app/server.py`) and told apart by the `
 it is one now, because two of everything to run, restart and deploy bought nothing the hostname split does not already give.
 
 The split that matters is the hostnames: `resume.evancooperman.com` is intentionally sign-in-free (Cloudflare-Access-**Bypassed**, so the
-public/redacted page loads for strangers), and `resume-admin.evancooperman.com` is gated by the app itself (the dashboard sign-in plus an account
+public/redacted page loads for strangers), and `jobs.evancooperman.com` is gated by the app itself (the dashboard sign-in plus an account
 here). Two hostnames keep Cloudflare's per-hostname rules (Bypass, cache) simple, and the two apps share nothing that a request on one could use
-to reach the other: a request goes to the admin app only if its `Host` is one of `RESUME_ADMIN_HOSTS` (default `resume-admin.evancooperman.com`
-and `resume-admin.localhost`, the latter for the other apps' calls on the droplet); anything else, including an unknown host, goes to the public
+to reach the other: a request goes to the admin app only if its `Host` is one of `RESUME_ADMIN_HOSTS` (default `jobs.evancooperman.com`, the old
+`resume-admin.evancooperman.com`, `jobs.localhost` and `resume-admin.localhost`, the last two for local development and the other apps' calls on the droplet; the droplet steps for the rename are
+in `../DEPLOYMENT.md`, "The jobs hostname"); anything else, including an unknown host, goes to the public
 app, which has no sign-in-only routes at all. This replaces the old structural guarantee (admin on a port with no tunnel route from the public
 hostname) with one in code, so `tests/test_server.py` pins it: every admin-only route is swept on a public host and must not answer, and a
 signed-out request on the admin host is still refused. Even a forged `Host: resume-admin...` only reaches the admin app's own gate (default-deny).

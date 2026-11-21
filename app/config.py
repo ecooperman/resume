@@ -34,10 +34,13 @@ if ENV != "production":
     ADMIN_EMAILS.add(DEV_USER_EMAIL)
 
 # app/server.py runs BOTH sites in one process and tells them apart by the Host header: these hostnames (comma-separated, lowercase, no port)
-# get the signed-in admin app, everything else gets the public site. The second one is for the other apps' calls on this machine
-# (the dashboard and time-management reach the admin app at http://resume-admin.localhost:8040); locally it also lets one
-# `uvicorn app.server:app` serve both at localhost:8040 (public) and resume-admin.localhost:8040 (admin).
-ADMIN_HOSTS = {h.strip().lower() for h in os.environ.get("RESUME_ADMIN_HOSTS", "resume-admin.evancooperman.com,resume-admin.localhost").split(",") if h.strip()}
+# get the signed-in admin app, everything else gets the public site. jobs.evancooperman.com is the app's address (renamed from resume-admin on
+# 2026-11-20); the old resume-admin address stays as an ALIAS so bookmarks, emails already sent and Chrome extensions installed with it keep
+# working (retire it later, see TODO.md). The .localhost names are for the other apps' calls on this machine (the dashboard reaches the admin app at
+# http://resume-admin.localhost:8040) and for local development: one `uvicorn app.server:app` serves the public site at localhost:8040 and the
+# admin app at jobs.localhost:8040 (or resume-admin.localhost:8040). The PUBLIC hostname (resume.evancooperman.com) must never be in this list.
+DEFAULT_ADMIN_HOSTS = ("jobs.evancooperman.com", "resume-admin.evancooperman.com", "jobs.localhost", "resume-admin.localhost")
+ADMIN_HOSTS = {h.strip().lower() for h in os.environ.get("RESUME_ADMIN_HOSTS", ",".join(DEFAULT_ADMIN_HOSTS)).split(",") if h.strip()}
 
 # The server's own Anthropic key (above) is for administrators. An administrator may also let particular people fall back to it when they
 # have no key of their own (the Users page). By default that is unlimited; set HOUSE_KEY_CALLS_PER_MONTH to give each of them that many AI runs a
@@ -69,7 +72,7 @@ MAX_PUSH_BYTES = 12 * 1024 * 1024
 INVITES_PER_USER = int(os.environ.get("INVITES_PER_USER", "5"))
 
 # Where emails send people to sign in and where the public site lives.
-ADMIN_PUBLIC_URL = "https://resume-admin.evancooperman.com" if ENV == "production" else f"http://127.0.0.1:{PORT_ADMIN}"
+ADMIN_PUBLIC_URL = "https://jobs.evancooperman.com" if ENV == "production" else f"http://127.0.0.1:{PORT_ADMIN}"
 PUBLIC_SITE_URL = "https://resume.evancooperman.com" if ENV == "production" else f"http://127.0.0.1:{PORT}"
 
 SITE_DIR = Path(__file__).resolve().parent.parent / "site"

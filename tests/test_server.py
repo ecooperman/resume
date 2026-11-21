@@ -82,3 +82,20 @@ def test_both_apps_start_and_stop_as_they_would_alone(monkeypatch):
     with TestClient(server.app):
         assert sorted(seen) == ["admin up", "public up"]
     assert sorted(seen) == ["admin down", "admin up", "public down", "public up"]
+
+
+def test_the_shipped_hostnames_are_the_jobs_address_its_old_alias_and_the_local_names_and_never_the_public_site():
+    """jobs.evancooperman.com is the app's address (renamed from resume-admin); the old address keeps working as an alias; resume.evancooperman.com is the
+    public site and must never land on the admin app."""
+    assert set(config.DEFAULT_ADMIN_HOSTS) == {"jobs.evancooperman.com", "resume-admin.evancooperman.com", "jobs.localhost", "resume-admin.localhost"}
+    assert "resume.evancooperman.com" not in config.DEFAULT_ADMIN_HOSTS
+    assert config.ADMIN_PUBLIC_URL in ("https://jobs.evancooperman.com", f"http://127.0.0.1:{config.PORT_ADMIN}")
+
+
+def test_both_the_new_and_the_old_address_reach_the_admin_app_and_the_public_hostname_does_not(production, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_HOSTS", set(config.DEFAULT_ADMIN_HOSTS))
+    for host in ("jobs.evancooperman.com", "resume-admin.evancooperman.com", "jobs.localhost:8040"):
+        got = client(host).get("/api/people", headers={"host": host})
+        assert got.status_code in (302, 401, 403), (host, got.status_code)  # the admin app's own sign-in gate answered
+    got = client("resume.evancooperman.com").get("/api/people", headers={"host": "resume.evancooperman.com"})
+    assert got.status_code == 404  # the public site has no such route at all

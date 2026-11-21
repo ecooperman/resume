@@ -284,3 +284,9 @@ class BuilderDraft(Base, owned.OwnedMixin):
     resume_yaml = Column(Text, nullable=False, default="", server_default="")
     person_id = Column(Integer, nullable=True)
     updated_at = Column(DateTime, default=clock.utcnow, onupdate=clock.utcnow, nullable=False)
+
+
+# Tell the dashboard when someone's access to this app changes (shared_python.access_events), so every menu's list of apps follows.
+from shared_python import access_events  # noqa: E402
+
+access_events.install(User)

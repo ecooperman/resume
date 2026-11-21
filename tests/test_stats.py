@@ -31,3 +31,14 @@ def test_the_gate_notes_when_a_person_was_last_seen(person, people):
     with owned.unscoped(), SessionLocal() as db:
         user = db.query(models.User).filter(models.User.email == "bob@example.com").one()
         assert user.active_days == 1 and user.last_seen_at is not None and (clock.utcnow() - user.last_seen_at).total_seconds() < 60
+
+
+def test_the_dashboards_account_check_is_not_the_person_being_here(person, people):
+    carol = person("carol@example.com")
+    assert carol.get("/api/me", headers={"X-Brassworks-Probe": "1"}).status_code == 200
+    with owned.unscoped(), SessionLocal() as db:
+        user = db.query(models.User).filter(models.User.email == "carol@example.com").one()
+        assert user.last_seen_at is None and not user.active_days  # the dashboard looking is not use
+    assert carol.get("/api/me").status_code == 200
+    with owned.unscoped(), SessionLocal() as db:
+        assert db.query(models.User).filter(models.User.email == "carol@example.com").one().active_days == 1  # but the person is

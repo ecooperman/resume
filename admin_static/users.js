@@ -1,4 +1,4 @@
-// Users (users.html, administrator only): everyone with an account in Resume; add someone, remove (and restore) their
+// Users (users.html, administrator only): everyone with an account in Jobs; add someone, remove (and restore) their
 // access, or delete a removed person's data. The server refuses all of it to anyone else (403). An administrator
 // manages WHO has an account here and never sees what anyone owns: everyone's data is private to them.
 
@@ -47,7 +47,7 @@ function card(u) {
   if (u.status === "active" && !u.is_admin) {
     const b = Global.el("button", { type: "button", class: "cancel-btn", text: "Remove access" });
     b.addEventListener("click", () => {
-      if (!confirm(`Remove ${u.email}'s access to Resume?\n\nThey won't be able to use it, but nothing of theirs is deleted and you can restore them any time.`)) return;
+      if (!confirm(`Remove ${u.email}'s access to Jobs?\n\nThey won't be able to use it, but nothing of theirs is deleted and you can restore them any time.`)) return;
       act(b, () => send(`/${u.id}`, "PATCH", { status: "removed" }), `${u.email} can no longer use Resume.`);
     });
     actions.push(b);
@@ -95,7 +95,7 @@ async function load() {
     "data-lpignore": "true",
     "data-bwignore": "true",
     "data-form-type": "other",
-    "aria-label": "Email address of someone to let into Resume",
+    "aria-label": "Email address of someone to let into Jobs",
   });
   const refreshSuggestions = Global.suggestEmails(input, "/api/users/suggestions");
   const button = Global.el("button", { type: "button", class: "secondary-btn", text: "Add" });
@@ -115,7 +115,7 @@ async function load() {
       const user = await send("", "POST", { email });
       input.value = "";
       refreshSuggestions();
-      Global.showMessage(`${user.email} can now sign in to Resume.`, "success");
+      Global.showMessage(`${user.email} can now sign in to Jobs.`, "success");
       load();
     } catch (err) {
       show(err.message);

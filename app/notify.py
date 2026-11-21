@@ -4,7 +4,7 @@ from shared_python.notify import describe_failure, notify, send_email  # noqa: F
 
 from . import config
 
-APP_NAME = "Resume"
+APP_NAME = "Jobs"
 
 
 def invite_requested(inviter_email: str, invitee_email: str) -> None:

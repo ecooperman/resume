@@ -119,7 +119,7 @@ def ask_for_someone(
         raise HTTPException(status_code=400, detail="That doesn't look like an email address")
     existing = crud.get_user_by_email(db, email)
     if existing is not None and existing.status == models.USER_REMOVED:
-        raise HTTPException(status_code=409, detail=f"{email}'s access to Resume was removed. Only an administrator can restore it.")
+        raise HTTPException(status_code=409, detail=f"{email}'s access to Jobs was removed. Only an administrator can restore it.")
     if (existing is not None and existing.status == models.USER_ACTIVE) or email in config.ADMIN_EMAILS:
         raise HTTPException(status_code=409, detail=f"{email} can already sign in, so there's nothing to request.")
     invite, problem = crud.create_invite(db, account.id, account.is_admin, email)

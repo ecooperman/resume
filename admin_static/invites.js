@@ -18,7 +18,7 @@ async function decide(invite, action, buttons) {
   buttons.forEach((b) => (b.disabled = true));
   try {
     await Global.fetchJSON(`/api/admin/invites/${invite.id}/${action}`, { method: "POST" });
-    Global.showMessage(action === "approve" ? `${invite.email} can now sign in to Resume.` : `Declined ${invite.email}.`, "success");
+    Global.showMessage(action === "approve" ? `${invite.email} can now sign in to Jobs.` : `Declined ${invite.email}.`, "success");
   } catch (err) {
     Global.showMessage(err.message, "error");
   }

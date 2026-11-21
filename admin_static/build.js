@@ -112,7 +112,7 @@ function renderKey() {
         el("ol", { class: "steps-list" }, [
           el("li", {}, [consoleLink("Open the Anthropic Console"), document.createTextNode(" and sign up (or sign in). This is console.anthropic.com, not claude.ai.")]),
           el("li", { text: "Add credit: in the Console go to Settings, then Billing, and buy a small amount of credit (the smallest, about $5, is plenty to start). Without credit the key is created but every run fails." }),
-          el("li", { text: "Go to Settings, then API keys, press Create key, give it any name (for example Resume app) and copy it. The Console shows the whole key only once, so paste it here straight away." }),
+          el("li", { text: "Go to Settings, then API keys, press Create key, give it any name (for example Jobs app) and copy it. The Console shows the whole key only once, so paste it here straight away." }),
           el("li", { text: "Paste it in the box below and press Save key. It is saved encrypted, only you can use it, and it is never shown again." }),
         ]),
         el("p", { class: "hint", text: "What it costs, roughly: a first resume draft 10 to 50 cents; scoring one job a few cents; a tailored resume and cover letter for one job a few tens of cents. You can see exactly what you have spent in the Anthropic Console, and set a spending limit there." })

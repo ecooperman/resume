@@ -348,3 +348,9 @@ def test_reviews_have_their_own_hourly_limit_apart_from_drafts(person, people, m
 def test_a_job_with_no_end_date_counts_as_current_for_the_more_than_one_current_job_tip():
     got = check(jobs_yaml(("Acme", "Mar 2019", "Present", "['Led 3 teams']", ""), ("Beta", "Jan 2020", "", "['Built 4 sites']", "")))
     assert any("2 jobs are marked Present" in s["text"] for s in got)
+
+
+def test_a_job_with_no_end_date_is_treated_as_present_when_looking_for_overlaps():
+    got = overlaps("", "May 2026", first_start="Jan 2026", second_end="Dec 2026")  # the first has no end: still going, so it overlaps
+    assert got and "Jan 2026 to Present" in got[0]
+    assert not overlaps("", "Mar 2018", first_start="Jan 2020", second_end="Dec 2019")  # a current job that began after the other one ended

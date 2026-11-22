@@ -45,6 +45,11 @@ def _job_find(job: dict) -> List[str]:
     return [f"company: {company}" if company else "", company, f"title: {title}" if title else "", "experience:"]
 
 
+def _end_text(job) -> str:
+    """A job's end as it prints: no end on a job that has a start means Present (the same rule as the printed resume)."""
+    return _text(job.get("end")) or ("Present" if _text(job.get("start")) else "")
+
+
 def _months(value, today: date, late: bool = False) -> Optional[int]:
     """A resume date ("Mar 2019", "March 2019", "2019", "03/2019", "2019-03", Present) as a month count, or None if it is not one
     this understands (the check that needed it is then simply skipped). A bare year does not say which month, so it is read as the
@@ -151,7 +156,7 @@ def check_resume(data: dict, today: Optional[date] = None) -> List[dict]:
 
     # Jobs that overlap in time: sometimes true (a promotion month, side work), often a typo.
     # Sure overlaps only: the latest each job could have started against the earliest it could have ended (they differ for a bare year).
-    dated = [(j, _months(j.get("start"), today, late=True), _months(j.get("end"), today)) for j in shown]
+    dated = [(j, _months(j.get("start"), today, late=True), _months(_end_text(j), today)) for j in shown]
     dated = [(j, s, e) for j, s, e in dated if s is not None and e is not None]
     overlaps = []
     for i, (a, a_start, a_end) in enumerate(dated):
@@ -159,7 +164,7 @@ def check_resume(data: dict, today: Optional[date] = None) -> List[dict]:
             if min(a_end, b_end) - max(a_start, b_start) >= MIN_OVERLAP_MONTHS:
                 overlaps.append((a, b))
     for a, b in overlaps[:MAX_OVERLAPS]:
-        out.append(_item("tip", "Experience", f"{names[id(a)]} ({_text(a.get('start'))} to {_text(a.get('end'))}) overlaps {names[id(b)]} ({_text(b.get('start'))} to {_text(b.get('end'))}). Most people never hold two jobs at once, so this is usually a wrong date. Check them; if one was side or contract work, you can keep it off the resume with include_in_resume: false.", _job_find(b), nth_of[id(b)]))
+        out.append(_item("tip", "Experience", f"{names[id(a)]} ({_text(a.get('start'))} to {_end_text(a)}) overlaps {names[id(b)]} ({_text(b.get('start'))} to {_end_text(b)}). Most people never hold two jobs at once, so this is usually a wrong date. Check them; if one was side or contract work, you can keep it off the resume with include_in_resume: false.", _job_find(b), nth_of[id(b)]))
     if len(overlaps) > MAX_OVERLAPS:
         out.append(_item("tip", "Experience", f"{len(overlaps) - MAX_OVERLAPS} more pairs of jobs overlap in time.", ["experience:"]))
 

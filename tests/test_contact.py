@@ -82,7 +82,28 @@ def test_deleting_a_persons_data_deletes_their_messages_and_nobody_elses(person,
         assert [m.body for m in db.query(models.Message).all()] == ["carol's"]
 
 
-def test_the_page_opens_for_anyone_with_an_account_and_not_for_a_stranger(person, people):
-    assert person("bob@example.com").get("/contact.html").status_code == 200
-    assert "Send feedback" in person("bob@example.com").get("/contact.html").text
-    assert person("dana@example.com").get("/contact.html").status_code == 403
+def test_the_old_page_now_opens_the_shared_form_on_the_front_page_and_still_needs_an_account(person, people):
+    resp = person("bob@example.com").get("/contact.html", follow_redirects=False)
+    assert resp.status_code == 302 and resp.headers["location"] == "/?feedback=1"
+    assert person("dana@example.com").get("/contact.html", follow_redirects=False).status_code == 403
+
+
+def test_the_shared_send_feedback_form_posts_here_and_is_passed_to_the_dashboard_as_jobs(person, people, monkeypatch):
+    import requests
+    from shared_python import settings
+
+    calls = []
+
+    class Reply:
+        status_code = 200
+
+        def json(self):
+            return {"id": 1}
+
+    monkeypatch.setattr(settings, "DASHBOARD_API_BASE", "http://127.0.0.1:8090")
+    monkeypatch.setattr(requests, "post", lambda url, json=None, headers=None, timeout=None, allow_redirects=True: calls.append((url, json)) or Reply())
+    assert person("bob@example.com").post("/api/feedback", json={"kind": "idea", "body": "Please add more"}).status_code == 200
+    sent = [c for c in calls if c[0].endswith("/internal/feedback")]
+    assert sent == [("http://127.0.0.1:8090/internal/feedback", {"app": "resume", "kind": "idea", "body": "Please add more", "page": None})]
+    assert person("dana@example.com").post("/api/feedback", json={"kind": "idea", "body": "Please add more"}).status_code == 403  # no account here
+    assert len([c for c in calls if c[0].endswith("/internal/feedback")]) == 1

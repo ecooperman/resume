@@ -22,7 +22,7 @@ from typing import Literal, Optional
 import yaml
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from shared_python import accounts_gate, oidc_login, owned
+from shared_python import accounts_gate, feedback_relay, oidc_login, owned
 from shared_python.accounts_gate import Account
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -49,6 +49,7 @@ app.include_router(invites.app_router)
 app.include_router(contact.router)
 app.include_router(stats.router)
 app.include_router(contact.app_router)
+feedback_relay.install(app, "resume")  # the shared Send feedback form posts here; passed on to the dashboard's inbox (behind the accounts gate)
 templates = Jinja2Templates(directory=str(ADMIN_TEMPLATES_DIR))
 
 
@@ -95,7 +96,14 @@ app.get("/users.html", response_class=HTMLResponse)(_page("users.html", admin_on
 app.get("/invites.html", response_class=HTMLResponse)(_page("invites.html"))
 app.get("/jobs.html", response_class=HTMLResponse)(_page("jobs.html"))
 app.get("/extension.html", response_class=HTMLResponse)(_page("extension.html"))
-app.get("/contact.html", response_class=HTMLResponse)(_page("contact.html"))
+
+
+@app.get("/contact.html")
+def contact_page():
+    """Send feedback used to be a page of its own; it is now the form every app's menu opens over the page (shared-assets), and the messages
+    go to the dashboard's one inbox. Old links (the Chrome extension's, bookmarks) land on the front page with the form open."""
+    return RedirectResponse("/?feedback=1", status_code=302)
+
 
 
 # --- internal-only endpoints, for the time-management app's resume

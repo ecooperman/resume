@@ -66,13 +66,10 @@ class Invite(Base):
     invited_by = relationship("User")
 
 
-MESSAGE_KINDS = ("problem", "idea", "question")
-
-
 class Message(Base):
-    """Something a person sent the administrator from the Send feedback page: a problem, an idea or a question. Kept here (and the administrator
-    told) so nothing is lost if an email or phone push fails. NOT owned (shared_python.owned): the administrator reads everyone's, and each
-    person's own are picked out by user_id in crud. Deleted with the person's data."""
+    """LEGACY: what people sent from this app's own Send feedback page, before feedback moved to the one inbox on the dashboard (copied there on
+    2026-11-21). Nothing writes to it any more; the table stays as a record (no destructive migration) and a person's rows still go with their
+    data. NOT owned (shared_python.owned): picked out by user_id in crud."""
 
     __tablename__ = "messages"
 

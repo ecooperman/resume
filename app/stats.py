@@ -21,5 +21,4 @@ def stats():
             "tailored resumes": usage.per_user(db, models.Job.owner_id, None, models.Job.generated_resume_yaml.isnot(None)),
             "extension tokens": usage.per_user(db, models.PushToken.owner_id, models.PushToken.created_at),
             "AI runs on the house key": usage.per_user(db, models.HouseKeyUse.user_id, models.HouseKeyUse.at),
-            "messages sent": usage.per_user(db, models.Message.user_id, models.Message.created_at),
         })

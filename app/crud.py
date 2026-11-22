@@ -628,50 +628,6 @@ def remove_invite(db: Session, invite) -> None:
     db.commit()
 
 
-# --- messages: what people send the administrator from the Send feedback page (app/contact.py).
-
-
-def create_message(db: Session, user_id: int, kind: str, body: str, page: Optional[str]):
-    message = models.Message(user_id=user_id, kind=kind, body=body, page=page)
-    db.add(message)
-    db.commit()
-    db.refresh(message)
-    return message
-
-
-def messages_sent_since(db: Session, user_id: int, since: datetime) -> int:
-    return db.query(func.count(models.Message.id)).filter(models.Message.user_id == user_id, models.Message.created_at >= since).scalar()
-
-
-def my_messages(db: Session, user_id: int, limit: int = 20):
-    return db.query(models.Message).filter(models.Message.user_id == user_id).order_by(models.Message.id.desc()).limit(limit).all()
-
-
-def all_messages(db: Session):
-    """Everyone's, the ones still waiting first and the newest first within each."""
-    return (db.query(models.Message).options(joinedload(models.Message.user))
-            .order_by(models.Message.done_at.isnot(None), models.Message.id.desc()).all())
-
-
-def get_message(db: Session, message_id: int):
-    return db.query(models.Message).options(joinedload(models.Message.user)).filter(models.Message.id == message_id).first()
-
-
-def new_message_count(db: Session) -> int:
-    return db.query(func.count(models.Message.id)).filter(models.Message.done_at.is_(None)).scalar()
-
-
-def set_message_done(db: Session, message, done: bool):
-    message.done_at = clock.utcnow() if done else None
-    db.commit()
-    return message
-
-
-def remove_message(db: Session, message) -> None:
-    db.delete(message)
-    db.commit()
-
-
 def set_user_status(db: Session, user, status: str):
     user.status = status
     db.commit()

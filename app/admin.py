@@ -29,7 +29,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from . import access, apikeys, builder, clock, config, contact, crud, drafts, extension, feedback, generate, invites, jobs, limits, push, render, stats, tokens, users
+from . import access, apikeys, builder, clock, config, crud, drafts, extension, feedback, generate, invites, jobs, limits, push, render, stats, tokens, users
 from .database import SessionLocal
 from .deps import get_db
 
@@ -46,9 +46,7 @@ app.include_router(jobs.router)
 app.include_router(tokens.router)
 app.include_router(extension.router)
 app.include_router(invites.app_router)
-app.include_router(contact.router)
 app.include_router(stats.router)
-app.include_router(contact.app_router)
 feedback_relay.install(app, "resume")  # the shared Send feedback form posts here; passed on to the dashboard's inbox (behind the accounts gate)
 templates = Jinja2Templates(directory=str(ADMIN_TEMPLATES_DIR))
 
@@ -61,7 +59,6 @@ def get_me(request: Request, account: Account = Depends(accounts_gate.current_ac
           "invites_left": crud.invites_left(db, account.id, account.is_admin)}
     if account.is_admin:
         me["pending_invites"] = crud.pending_invite_count(db)
-        me["new_messages"] = crud.new_message_count(db)
     return me
 
 

@@ -373,14 +373,14 @@ def _extract_yaml(text: str) -> str:
     return match.group(1) if match else text
 
 
-MODEL = "claude-opus-5"
+MODEL = config.ANTHROPIC_MODEL  # a setting (RESUME_MODEL), so the model can change without a code change
 
 
 # The model thinks before it answers, and its thinking counts against max_tokens along with the answer itself, so a limit that looks
 # generous for a resume (it is about 7,000 tokens) can run out part-way through (a draft once stopped in the middle of a job and every
 # job, the skills and the education after it were silently missing). Both limits stay under the SDK's 21,333-token ceiling for a
 # request that is not streamed. A response that stopped for lack of room is refused (see _ask_claude), never used.
-DRAFT_MAX_TOKENS = 20_000
+DRAFT_MAX_TOKENS = config.DRAFT_MAX_TOKENS  # a setting (RESUME_DRAFT_MAX_TOKENS), 20,000 unless changed
 DRAFT_EFFORT = "medium"  # how hard it thinks first; "high" (the model's default) took long enough to hit proxy time limits
 
 

@@ -51,8 +51,25 @@ LEGACY_ADMIN_HOSTS = {h.strip().lower() for h in os.environ.get("RESUME_LEGACY_H
 # calendar month (a draft, a pasted-list import and a review each count one), after which they need a key of their own. Every run is counted
 # either way, for the usage line on the Users page; the prices are only for its estimate (dollars per million tokens for the model in app/generate.py).
 HOUSE_KEY_CALLS_PER_MONTH = int(os.environ.get("HOUSE_KEY_CALLS_PER_MONTH", "0"))  # 0 = no limit
-PRICE_INPUT_PER_MTOK = 5.0
-PRICE_OUTPUT_PER_MTOK = 25.0
+PRICE_INPUT_PER_MTOK = float(os.environ.get("PRICE_INPUT_PER_MTOK", "5.0"))
+PRICE_OUTPUT_PER_MTOK = float(os.environ.get("PRICE_OUTPUT_PER_MTOK", "25.0"))  # change both with RESUME_MODEL: they are per million tokens of THAT model
+
+
+def bounded_int(raw, default: int, low: int, high: int) -> int:
+    """A whole-number setting from the environment: the default when it is missing or not a number, and never outside [low, high]."""
+    try:
+        return max(low, min(high, int(str(raw).replace("_", "").replace(",", "").strip())))
+    except (TypeError, ValueError):
+        return default
+
+
+# The model every AI step uses (drafting, the pasted-list import, the review, scoring a job, tailoring) and the most tokens a draft or a tailored
+# resume may use for thinking plus the answer. Settings so either can change on the droplet without a code change: RESUME_MODEL (default
+# claude-opus-5) and RESUME_DRAFT_MAX_TOKENS (default 20,000; kept between 4,000 and 21,000, because a request that is not streamed may not ask for
+# more than the SDK's 21,333-token ceiling). Raise the limit if a long career is cut off ("never became valid"). A model with other prices needs
+# PRICE_INPUT_PER_MTOK / PRICE_OUTPUT_PER_MTOK changed to match, or the Users page's cost estimate is off.
+ANTHROPIC_MODEL = (os.environ.get("RESUME_MODEL") or "claude-opus-5").strip()
+DRAFT_MAX_TOKENS = bounded_int(os.environ.get("RESUME_DRAFT_MAX_TOKENS"), default=20_000, low=4_000, high=21_000)
 
 # Jobs (app/jobs.py): how many one account may keep, and the largest CSV import (rows and bytes). A job description is cut at MAX_JD_CHARS.
 MAX_JOBS_PER_ACCOUNT = 2000

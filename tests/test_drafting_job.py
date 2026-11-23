@@ -142,3 +142,22 @@ def test_a_finished_job_nobody_collects_is_forgotten_after_an_hour(person, peopl
     account_id = next(iter(drafts._jobs))
     assert drafts.status(account_id)["state"] == "done"
     assert drafts.status(account_id, now=time.time() + drafts.KEEP_SECONDS + 5) == {"state": "idle"}
+
+
+# --- the model and the draft limit are settings --------------------------------------------------------------------------------
+
+
+def test_the_draft_limit_is_a_setting_with_sensible_bounds():
+    from app import config
+
+    assert config.bounded_int(None, 20_000, 4_000, 21_000) == 20_000  # not set
+    assert config.bounded_int("18,000", 20_000, 4_000, 21_000) == 18_000 and config.bounded_int("18_000", 20_000, 4_000, 21_000) == 18_000
+    assert config.bounded_int("lots", 20_000, 4_000, 21_000) == 20_000  # not a number: the default, never a crash at start-up
+    assert config.bounded_int("100000", 20_000, 4_000, 21_000) == 21_000  # above the SDK's ceiling for a request that is not streamed
+    assert config.bounded_int("10", 20_000, 4_000, 21_000) == 4_000
+
+
+def test_the_defaults_are_todays_model_and_limit():
+    from app import config, generate
+
+    assert generate.MODEL == config.ANTHROPIC_MODEL == "claude-opus-5" and generate.DRAFT_MAX_TOKENS == 20_000

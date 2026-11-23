@@ -22,7 +22,7 @@ from typing import Literal, Optional
 import yaml
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from shared_python import accounts_gate, feedback_relay, oidc_login, owned
+from shared_python import accounts_gate, feedback_relay, oidc_login, owned, user_keys
 from shared_python.accounts_gate import Account
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -47,6 +47,7 @@ app.include_router(tokens.router)
 app.include_router(extension.router)
 app.include_router(invites.app_router)
 app.include_router(stats.router)
+user_keys.install(app)  # remembers the request's sign-in cookie, so the person's key can be fetched from the dashboard for this request only
 feedback_relay.install(app, "resume")  # the shared Send feedback form posts here; passed on to the dashboard's inbox (behind the accounts gate)
 templates = Jinja2Templates(directory=str(ADMIN_TEMPLATES_DIR))
 
@@ -203,42 +204,8 @@ def render_cover_letter_document(body: CoverLetterRenderRequest):
 # few drafts an hour (app/limits.py).
 
 
-class ApiKeyIn(BaseModel):
-    key: str
-
-
-class ApiKeySaved(BaseModel):
-    status: dict
-    verified: Optional[bool]
-    note: str = ""
-
-
 @app.get("/api/api-key")
 def api_key_status(account: Account = Depends(accounts_gate.current_account), db: Session = Depends(get_db)):
-    return apikeys.status(db, account)
-
-
-@app.put("/api/api-key", response_model=ApiKeySaved)
-def save_api_key(body: ApiKeyIn, account: Account = Depends(accounts_gate.current_account), db: Session = Depends(get_db)):
-    """Check the key with Anthropic, then store it encrypted. A key Anthropic refuses is not saved; one that could not be
-    checked (Anthropic was unreachable) is saved and reported as unverified."""
-    if not apikeys.storage_available():
-        raise HTTPException(status_code=503, detail="Saving keys isn't set up on the server yet - ask the administrator")
-    try:
-        key = apikeys.clean(body.key)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    verified, why = apikeys.verify(key)
-    if verified is False:
-        raise HTTPException(status_code=400, detail=why)
-    apikeys.save(db, key)
-    return ApiKeySaved(status=apikeys.status(db, account), verified=verified, note="" if verified else f"Saved, but not verified: {why}.")
-
-
-@app.delete("/api/api-key")
-def remove_api_key(account: Account = Depends(accounts_gate.current_account), db: Session = Depends(get_db)):
-    if not apikeys.remove(db):
-        raise HTTPException(status_code=404, detail="You haven't saved a key")
     return apikeys.status(db, account)
 
 

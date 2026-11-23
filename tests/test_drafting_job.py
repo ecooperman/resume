@@ -6,6 +6,7 @@ import time
 from app import drafts, generate, limits
 from tests.test_accounts import ADMIN, key, people, person, production  # noqa: F401 - fixtures
 from tests.test_builder import KEY_A, KEY_B, Cut, Fake, GOOD_YAML, accepts, key_storage, run_draft  # noqa: F401 - key_storage is an autouse fixture
+from tests.dashboard_keys import save_key  # noqa: E402
 
 
 class Gate:
@@ -30,7 +31,7 @@ class Gate:
 def ready(person, monkeypatch, email="bob@example.com", key_value=KEY_A):
     accepts(monkeypatch)
     who = person(email)
-    who.put("/api/api-key", json={"key": key_value})
+    save_key(who, key_value)
     who.post("/api/engagements", json={"client": "Acme"})
     return who
 

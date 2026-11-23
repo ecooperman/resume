@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 
 import yaml
 from fastapi import HTTPException
-from shared_python import owned
+from shared_python import owned, user_keys
 from shared_python.accounts_gate import Account
 
 from . import apikeys, clock, config, crud, generate, limits, models
@@ -150,7 +150,10 @@ def enqueue(account: Account, job_ids: List[int]) -> int:
         q["pending"].extend(fresh)
         q["total"] += len(fresh)
     if start_worker:
-        threading.Thread(target=_work, args=(account,), name=f"score-{account.id}", daemon=True).start()
+        # The worker has no request, so it is handed the person's session now (the key was fetched during this request, by blocked_reason's
+        # check, and is answered from memory) and holds it only until the queue ends.
+        session = user_keys.current()
+        threading.Thread(target=_work, args=(account, session), name=f"score-{account.id}", daemon=True).start()
     return len(fresh)
 
 
@@ -170,9 +173,9 @@ def _one(account: Account, job_id: int) -> Optional[str]:
     return None
 
 
-def _work(account: Account) -> None:
+def _work(account: Account, session=None) -> None:
     try:
-        with owned.scope(account.id):
+        with user_keys.use(session), owned.scope(account.id):
             while True:
                 with _lock:
                     q = _queues[account.id]

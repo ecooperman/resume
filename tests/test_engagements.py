@@ -4,6 +4,7 @@ just the page."""
 import pytest
 
 from tests.test_accounts import ADMIN, key, people, person, production  # noqa: F401 - fixtures
+from tests.dashboard_keys import save_key  # noqa: E402
 
 FULL = {
     "employer": "Acme", "client": "Blue Harbor", "client_does": "Sells health plans", "industry": "Health insurance",
@@ -128,7 +129,7 @@ PROPOSED = json.dumps([
 
 
 def with_key(who):
-    who.put("/api/api-key", json={"key": KEY_A})
+    save_key(who, KEY_A)
     return who
 
 

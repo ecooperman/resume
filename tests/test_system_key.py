@@ -9,6 +9,7 @@ from app import config, crud, models
 from app.database import SessionLocal
 from tests.test_accounts import ADMIN, key, people, person, production  # noqa: F401 - fixtures
 from tests.test_builder import KEY_A, Fake, GOOD_YAML, accepts, key_storage, run_draft  # noqa: F401 - key_storage is an autouse fixture
+from tests.dashboard_keys import save_key  # noqa: E402
 
 SERVER_KEY = "sk-ant-api03-the-servers-own-key-9999"
 
@@ -63,7 +64,7 @@ def test_their_own_key_always_comes_first_and_such_a_run_is_not_counted(person, 
     fake = Fake(monkeypatch, [GOOD_YAML])
     owner, bob = person(ADMIN), with_material(person("bob@example.com"))
     allow(owner, "bob@example.com")
-    bob.put("/api/api-key", json={"key": KEY_A})
+    save_key(bob, KEY_A)
     assert run_draft(bob).status_code == 200 and fake.keys[-1] == KEY_A
     assert usage(owner, "bob@example.com")["runs_this_month"] == 0
     assert bob.get("/api/api-key").json()["using_house_key"] is False

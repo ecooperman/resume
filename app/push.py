@@ -132,6 +132,10 @@ def push_jobs(request: Request, body: PushIn, account: Account = Depends(_accoun
     out = {**result, "queued": 0, "scoring_blocked": None}
     if body.score and to_score:
         blocked = scoring.blocked_reason(db, account)
+        if blocked and "Anthropic key" in blocked:
+            # A person's own key is only ever fetched while they are signed in, and this door has no sign-in (only the extension's token), so
+            # it can be used only when the system key covers them. Otherwise the jobs wait, saved, for the person's own Score button.
+            blocked = "Saved. Scoring uses your own Anthropic key, which is only used while you are signed in: open Jobs and press Score (or 'Score the jobs with no score yet')."
         if blocked:
             out["scoring_blocked"] = blocked  # they are saved; scoring starts when the person has what it needs and presses the button
         else:

@@ -16,6 +16,8 @@ from pypdf import PdfWriter
 from shared_python import settings
 
 from app import apikeys, config, generate, limits, models
+from fastapi import HTTPException
+from tests.dashboard_keys import remove_key, save_key
 from tests.test_accounts import ADMIN, key, people, person, production  # noqa: F401 - fixtures
 
 KEY_A = "sk-ant-api03-bobs-own-key-0001"
@@ -56,7 +58,7 @@ class Fake:
 
 
 def accepts(monkeypatch, verdict=(True, "")):
-    monkeypatch.setattr(apikeys, "verify", lambda key: verdict)
+    """Kept so the many tests that call it still read the same: keys are checked and saved on the dashboard now, not here, so there is nothing to stub."""
 
 
 def make_zip(files):
@@ -129,66 +131,46 @@ def upload(client, files, **fields):
 
 
 # --- the key ---------------------------------------------------------------------------------------------------------------------
+# A person saves their key once on their Brassworks profile (the dashboard); this app only reads what is there (tests/dashboard_keys.py).
 
 
-def test_a_person_saves_their_own_key_and_it_is_never_sent_back(person, people, monkeypatch):
-    accepts(monkeypatch)
+def test_the_page_says_what_is_saved_and_never_has_the_key_to_show(person, people):
     bob = person("bob@example.com")
     assert bob.get("/api/api-key").json()["has_own_key"] is False
-    saved = bob.put("/api/api-key", json={"key": KEY_A})
-    assert saved.status_code == 200 and saved.json()["status"]["has_own_key"] and saved.json()["status"]["last4"] == KEY_A[-4:]
-    assert KEY_A not in saved.text and KEY_A not in bob.get("/api/api-key").text
-    with __import__("app.database", fromlist=["SessionLocal"]).SessionLocal() as db:
-        from shared_python import owned
-
-        with owned.unscoped():
-            stored = db.query(models.UserApiKey).one().encrypted_key
-    assert KEY_A not in stored  # encrypted at rest
+    save_key(bob, KEY_A)  # saved on the dashboard
+    status = bob.get("/api/api-key").json()
+    assert status["has_own_key"] and status["last4"] == KEY_A[-4:] and status["usable"] is True
+    assert KEY_A not in bob.get("/api/api-key").text
 
 
-def test_a_key_anthropic_refuses_is_not_saved_and_one_that_could_not_be_checked_is_saved_with_a_note(person, people, monkeypatch):
+def test_saving_and_removing_are_on_the_dashboard_now(person, people):
     bob = person("bob@example.com")
-    accepts(monkeypatch, (False, "Anthropic didn't accept that key"))
-    refused = bob.put("/api/api-key", json={"key": KEY_A})
-    assert refused.status_code == 400 and bob.get("/api/api-key").json()["has_own_key"] is False
-    accepts(monkeypatch, (None, "Couldn't reach Anthropic to check the key"))
-    unsure = bob.put("/api/api-key", json={"key": KEY_A}).json()
-    assert unsure["verified"] is None and "not verified" in unsure["note"] and unsure["status"]["has_own_key"]
+    assert bob.put("/api/api-key", json={"key": KEY_A}).status_code == 405
+    assert bob.delete("/api/api-key").status_code == 405
 
 
-@pytest.mark.parametrize("bad", ["", "short", "has a space in it 1234567890", "x" * 500])
-def test_something_that_cannot_be_a_key_is_refused_before_anthropic_is_asked(person, people, monkeypatch, bad):
-    monkeypatch.setattr(apikeys, "verify", lambda key: pytest.fail("Anthropic should not be asked"))
-    assert person("bob@example.com").put("/api/api-key", json={"key": bad}).status_code == 400
-
-
-def test_checking_a_key_sends_only_that_key_to_anthropic_and_logs_none_of_it(monkeypatch, caplog):
-    seen = {}
-
-    def get(url, params=None, headers=None, timeout=None):
-        seen.update(url=url, headers=headers)
-        raise requests.ConnectionError(f"could not reach {headers['x-api-key']}")
-
-    monkeypatch.setattr(requests, "get", get)
-    assert apikeys.verify(KEY_A)[0] is None
-    assert seen["url"].startswith("https://api.anthropic.com/") and KEY_A not in caplog.text
-
-
-def test_keys_are_private_to_their_owner_and_removing_one_leaves_the_others(person, people, monkeypatch):
-    accepts(monkeypatch)
+def test_keys_are_private_to_their_owner(person, people):
     bob, carol = person("bob@example.com"), person("carol@example.com")
-    bob.put("/api/api-key", json={"key": KEY_A})
-    assert carol.get("/api/api-key").json()["has_own_key"] is False
-    carol.put("/api/api-key", json={"key": KEY_B})
-    assert carol.delete("/api/api-key").status_code == 200
-    assert carol.delete("/api/api-key").status_code == 404
+    save_key(bob, KEY_A)
+    assert carol.get("/api/api-key").json()["has_own_key"] is False  # the app asks with each person's own cookie, so carol sees carol's
+    save_key(carol, KEY_B)
+    assert remove_key(carol) is True and remove_key(carol) is False
     assert bob.get("/api/api-key").json()["last4"] == KEY_A[-4:]
 
 
-def test_saving_is_refused_when_the_server_has_no_secret_to_encrypt_with(person, people, monkeypatch):
-    monkeypatch.setattr(settings, "KEY_ENCRYPTION_SECRET", None)  # production, nothing configured
-    accepts(monkeypatch)
-    assert person("bob@example.com").put("/api/api-key", json={"key": KEY_A}).status_code == 503
+def test_a_dashboard_that_is_down_does_not_break_the_page_but_using_a_key_says_why(person, people, monkeypatch):
+    from shared_python import user_keys
+
+    def down(self, path):
+        raise HTTPException(status_code=503, detail="Couldn't reach the place your keys are kept just now. Please try again in a moment.")
+
+    monkeypatch.setattr(user_keys.KeySession, "_get", down)
+    bob = person("bob@example.com")
+    assert bob.get("/api/api-key").status_code == 200 and bob.get("/api/api-key").json()["has_own_key"] is False  # showing what is set never fails
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", None)
+    fake = Fake(monkeypatch, [GOOD_YAML])
+    resp = upload(bob, [("a.txt", b"hello")])
+    assert resp.status_code == 503 and "try again" in resp.json()["detail"] and fake.keys == []  # a sentence, not 'add your key'
 
 
 # --- who pays for a draft -------------------------------------------------------------------------------------------------------
@@ -199,8 +181,8 @@ def test_a_draft_uses_the_persons_own_key_and_nobody_elses(person, people, monke
     fake = Fake(monkeypatch, [GOOD_YAML, GOOD_YAML])
     monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "server-house-key")
     bob, carol = person("bob@example.com"), person("carol@example.com")
-    bob.put("/api/api-key", json={"key": KEY_A})
-    carol.put("/api/api-key", json={"key": KEY_B})
+    save_key(bob, KEY_A)
+    save_key(carol, KEY_B)
     assert upload(bob, [("a.txt", b"I worked at Acme")]).status_code == 200
     assert upload(carol, [("a.txt", b"I worked at Globex")]).status_code == 200
     assert fake.keys == [KEY_A, KEY_B]
@@ -225,7 +207,7 @@ def test_the_draft_is_returned_not_saved(person, people, monkeypatch):
     accepts(monkeypatch)
     Fake(monkeypatch, [GOOD_YAML])
     bob = person("bob@example.com")
-    bob.put("/api/api-key", json={"key": KEY_A})
+    save_key(bob, KEY_A)
     assert upload(bob, [("a.txt", b"hello")]).json() == {"resume_yaml": GOOD_YAML.strip()}
     assert bob.get("/api/people").json() == []  # nothing became a resume until they review and save it
 
@@ -237,7 +219,7 @@ def draft(person, monkeypatch, files, answers=(GOOD_YAML,), **fields):
     accepts(monkeypatch)
     fake = Fake(monkeypatch, answers)
     bob = person("bob@example.com")
-    bob.put("/api/api-key", json={"key": KEY_A})
+    save_key(bob, KEY_A)
     return upload(bob, files, **fields), fake
 
 
@@ -266,7 +248,7 @@ def test_the_stored_engagements_and_notes_are_what_claude_is_given(person, peopl
     accepts(monkeypatch)
     fake = Fake(monkeypatch, [GOOD_YAML])
     bob = person("bob@example.com")
-    bob.put("/api/api-key", json={"key": KEY_A})
+    save_key(bob, KEY_A)
     assert bob.post("/api/engagements", json=ENGAGEMENT).status_code == 200
     assert bob.post("/api/engagements", json={**ENGAGEMENT, "client": "Secret Co", "confidential": True}).status_code == 200
     bob.put("/api/builder/notes", json={"notes": "please keep it short"})
@@ -282,7 +264,7 @@ def test_a_draft_uses_only_the_signed_in_persons_own_engagements_and_notes(perso
     accepts(monkeypatch)
     fake = Fake(monkeypatch, [GOOD_YAML])
     bob, carol = person("bob@example.com"), person("carol@example.com")
-    bob.put("/api/api-key", json={"key": KEY_A})
+    save_key(bob, KEY_A)
     carol.post("/api/engagements", json={**ENGAGEMENT, "client": "CAROLS-CLIENT"})
     carol.put("/api/builder/notes", json={"notes": "CAROLS-NOTE"})
     assert upload(bob, [("a.txt", b"hello")]).status_code == 200
@@ -310,7 +292,7 @@ def test_an_update_is_told_to_merge_into_their_current_resume(person, people, mo
     accepts(monkeypatch)
     fake = Fake(monkeypatch, [GOOD_YAML])
     bob = person("bob@example.com")
-    bob.put("/api/api-key", json={"key": KEY_A})
+    save_key(bob, KEY_A)
     bob.post("/api/engagements", json=ENGAGEMENT)
     mine = make_resume(bob)
     resp = run_draft(bob, files=[("sources", ("new.zip", make_zip(LINKEDIN)))], data={"update_person_id": str(mine)})
@@ -331,7 +313,7 @@ def test_an_update_needs_new_material_not_just_the_old_resume(person, people, mo
     accepts(monkeypatch)
     fake = Fake(monkeypatch, [GOOD_YAML])
     bob = person("bob@example.com")
-    bob.put("/api/api-key", json={"key": KEY_A})
+    save_key(bob, KEY_A)
     mine = make_resume(bob)
     resp = run_draft(bob, data={"update_person_id": str(mine)})
     assert resp.status_code == 400 and "No source material" in resp.json()["detail"] and fake.calls == []
@@ -341,7 +323,7 @@ def test_nobody_can_merge_into_or_read_someone_elses_resume_through_an_update(pe
     accepts(monkeypatch)
     fake = Fake(monkeypatch, [GOOD_YAML])
     bob, carol = person("bob@example.com"), person("carol@example.com")
-    carol.put("/api/api-key", json={"key": KEY_B})
+    save_key(carol, KEY_B)
     bobs = make_resume(bob, CURRENT.replace("Bob Builder", "BOBS-PRIVATE-NAME"))
     resp = run_draft(carol, files=[("sources", ("a.txt", b"hi"))], data={"update_person_id": str(bobs)})
     assert resp.status_code == 404 and fake.calls == [] and "BOBS-PRIVATE" not in resp.text
@@ -403,7 +385,7 @@ def test_a_person_can_only_draft_a_few_times_an_hour_and_it_is_per_person(person
     Fake(monkeypatch, [GOOD_YAML] * (limits.MAX_DRAFTS + 3))
     bob, carol = person("bob@example.com"), person("carol@example.com")
     for who in (bob, carol):
-        who.put("/api/api-key", json={"key": KEY_A})
+        save_key(who, KEY_A)
     for _ in range(limits.MAX_DRAFTS):
         assert upload(bob, [("a.txt", b"hi")]).status_code == 200
     over = upload(bob, [("a.txt", b"hi")])
@@ -568,7 +550,7 @@ def test_drafting_again_after_one_more_engagement_needs_nothing_else(person, peo
     accepts(monkeypatch)
     fake = Fake(monkeypatch, [GOOD_YAML, GOOD_YAML])
     bob = person("bob@example.com")
-    bob.put("/api/api-key", json={"key": KEY_A})
+    save_key(bob, KEY_A)
     bob.post("/api/builder/sources", files=[("sources", ("export.zip", make_zip(LINKEDIN)))])
     assert run_draft(bob).status_code == 200
     bob.post("/api/engagements", json=ENGAGEMENT)
@@ -613,7 +595,7 @@ def test_when_files_are_not_kept_nothing_is_stored_and_the_files_ride_with_each_
     accepts(monkeypatch)
     fake = Fake(monkeypatch, [GOOD_YAML])
     bob = person("bob@example.com")
-    bob.put("/api/api-key", json={"key": KEY_A})
+    save_key(bob, KEY_A)
     bob.put("/api/builder/keep", json={"keep": False})
     refused = bob.post("/api/builder/sources", files=[("sources", ("cv.txt", b"some words here"))])
     assert refused.status_code == 409 and bob.put("/api/builder/draft", json={"resume_yaml": "x"}).status_code == 409
@@ -633,7 +615,7 @@ def test_a_generated_draft_is_kept_and_it_cannot_point_at_someone_elses_resume(p
     accepts(monkeypatch)
     Fake(monkeypatch, [GOOD_YAML])
     bob, carol = person("bob@example.com"), person("carol@example.com")
-    bob.put("/api/api-key", json={"key": KEY_A})
+    save_key(bob, KEY_A)
     bob.post("/api/engagements", json=ENGAGEMENT)
     assert run_draft(bob).status_code == 200
     assert bob.get("/api/builder/draft").json()["draft"]["resume_yaml"] == GOOD_YAML.strip()
@@ -651,18 +633,18 @@ def test_the_preview_summarises_a_draft_and_names_what_is_wrong(person, people):
     assert "'basics'" in bob.post("/api/builder/preview", json={"resume_yaml": "- a\n- b"}).json()["error"]
 
 
-def test_a_persons_key_is_deleted_with_the_rest_of_their_data(person, people, monkeypatch, admin_client=None):
+def test_a_persons_engagements_and_notes_are_deleted_with_the_rest_of_their_data(person, people, monkeypatch, admin_client=None):
     from app import crud
     from app.database import SessionLocal
 
     accepts(monkeypatch)
     bob = person("bob@example.com")
-    bob.put("/api/api-key", json={"key": KEY_A})
+    save_key(bob, KEY_A)
     bob.post("/api/engagements", json=ENGAGEMENT)
     bob.put("/api/builder/notes", json={"notes": "mine"})
     with SessionLocal() as db:
         gone = crud.delete_user_data(db, people["bob"])
-    assert gone["keys"] == 1 and gone["engagements"] == 1
+    assert gone["engagements"] == 1  # (their key is not here: it is kept on the dashboard, and removed there)
     assert bob.get("/api/engagements").json() == [] and bob.get("/api/builder/notes").json() == {"notes": "", "keep_files": True}
 
 

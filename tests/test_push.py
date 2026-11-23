@@ -14,6 +14,7 @@ from shared_python import owned
 from tests.test_accounts import ADMIN, bobs_resume, key, people, person, production  # noqa: F401 - fixtures
 from tests.test_builder import KEY_A, Cut, Fake, accepts, key_storage  # noqa: F401 - key_storage is an autouse fixture
 from tests.test_job_scoring import JD, SCORE, SERVER_KEY, server_key  # noqa: F401 - server_key is an autouse fixture
+from tests.dashboard_keys import save_key  # noqa: E402
 
 HOST = "https://resume-admin.example.org"
 
@@ -54,12 +55,17 @@ def wait_for_queue(account_id, timeout=5.0):
     raise AssertionError("the queue did not finish")
 
 
-def ready(person, monkeypatch, answers, email="bob@example.com", with_key=True, with_resume=True):
+def ready(person, monkeypatch, answers, email="bob@example.com", with_key=True, with_resume=True, system_key=False):
+    """`system_key`: no key of their own, but an administrator allowed them the system key. That is the only way a push (which has a token and no
+    sign-in) can be scored automatically: their own key is only ever fetched while they are signed in."""
     accepts(monkeypatch)
     fake = Fake(monkeypatch, answers)
     who = person(email)
-    if with_key:
-        who.put("/api/api-key", json={"key": KEY_A})
+    if with_key and not system_key:
+        save_key(who, KEY_A)
+    if system_key:
+        with owned.unscoped(), SessionLocal() as db:
+            crud.set_house_key(db, db.query(models.User).filter_by(email=email).one(), True)
     if with_resume:
         bobs_resume(who)
     return who, fake
@@ -195,8 +201,8 @@ def test_pushed_jobs_land_in_the_token_owners_account_and_nowhere_else(person, p
     assert bob.get("/api/jobs").json()[0]["has_description"] is True and bob.get("/api/jobs").json()[0]["tier"] is None
 
 
-def test_arrivals_with_a_description_are_scored_in_the_background_on_their_key(person, people, monkeypatch):
-    bob, fake = ready(person, monkeypatch, [json.dumps(SCORE)] * 3)
+def test_arrivals_with_a_description_are_scored_in_the_background_when_the_system_key_covers_them(person, people, monkeypatch):
+    bob, fake = ready(person, monkeypatch, [json.dumps(SCORE)] * 3, system_key=True)
     resp = push(make_token(bob)["token"], [posting(1), posting(2), posting(3, jd_text="")])
     body = resp.json()
     assert body["created"] == 3 and body["queued"] == 2 and body["scoring_blocked"] is None  # the one with no description has nothing to read
@@ -204,14 +210,23 @@ def test_arrivals_with_a_description_are_scored_in_the_background_on_their_key(p
     assert done["state"] == "done" and done["done"] == 2 and done["failed"] == 0
     got = {j["name"]: j["tier"] for j in bob.get("/api/jobs").json()}
     assert got == {"Engineer 1": "Good", "Engineer 2": "Good", "Engineer 3": None}
-    assert set(fake.keys) == {KEY_A}
+    assert set(fake.keys) == {SERVER_KEY}
     assert bob.get("/api/jobs/score-queue/status").json()["state"] == "done"
+
+
+def test_a_push_for_someone_with_their_own_key_saves_the_jobs_but_does_not_score_them_without_a_sign_in(person, people, monkeypatch):
+    bob, fake = ready(person, monkeypatch, [json.dumps(SCORE)])  # a key saved on the dashboard, and a resume
+    body = push(make_token(bob)["token"], [posting(1), posting(2)]).json()
+    assert body["created"] == 2 and body["queued"] == 0 and "only used while you are signed in" in body["scoring_blocked"]
+    assert fake.calls == [] and scoring.status(people["bob"])["state"] == "idle"
+    assert bob.post(f"/api/jobs/{bob.get('/api/jobs').json()[0]['id']}/score").status_code == 200  # signed in, their own Score button works
+    assert set(fake.keys) == {KEY_A}
 
 
 def test_with_no_key_or_no_resume_they_are_saved_and_it_says_why_scoring_did_not_start(person, people, monkeypatch):
     nokey, _ = ready(person, monkeypatch, [], with_key=False)
     body = push(make_token(nokey)["token"], [posting(1)]).json()
-    assert body["created"] == 1 and body["queued"] == 0 and "Anthropic key" in body["scoring_blocked"]
+    assert body["created"] == 1 and body["queued"] == 0 and "own Anthropic key" in body["scoring_blocked"]
     nores, _ = ready(person, monkeypatch, [], email="carol@example.com", with_resume=False)
     body = push(make_token(nores)["token"], [posting(1)]).json()
     assert body["queued"] == 0 and "Save your resume" in body["scoring_blocked"]
@@ -241,7 +256,7 @@ def test_pushing_the_same_posting_again_never_wipes_a_score_a_note_or_an_applied
 
 
 def test_a_repeat_fills_in_what_was_missing_and_then_scores_it(person, people, monkeypatch):
-    bob, _ = ready(person, monkeypatch, [json.dumps(SCORE)])
+    bob, _ = ready(person, monkeypatch, [json.dumps(SCORE)], system_key=True)
     token = make_token(bob)["token"]
     push(token, [posting(1, jd_text=None)])  # captured before the page had loaded its text
     assert bob.get("/api/jobs").json()[0]["has_description"] is False
@@ -388,7 +403,7 @@ def test_stopping_ends_the_queue_after_the_job_it_is_on(person, people, monkeypa
 
 
 def test_jobs_pushed_while_it_runs_join_the_same_queue_and_are_not_added_twice(person, people, monkeypatch):
-    bob, fake = ready(person, monkeypatch, [json.dumps(SCORE)] * 3)
+    bob, fake = ready(person, monkeypatch, [json.dumps(SCORE)] * 3, system_key=True)
     token = make_token(bob)["token"]
     gate = __import__("threading").Event()
     real = scoring.score_one

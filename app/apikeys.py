@@ -7,52 +7,23 @@ Each person brings their own key, so nobody is metered on the owner's bill. Whic
    allowed (the Users page; counted, a monthly allowance each, see HOUSE_KEY_CALLS_PER_MONTH). Anyone else without a key of their
    own simply cannot draft, and is told how to turn it on.
 
-Saved keys are encrypted (shared_python.keystore: KEY_ENCRYPTION_SECRET), never sent back to the browser (only the last four
-characters are kept in the clear) and never logged. This module is the same idea as trip-planning's apikeys.py, for the one
-provider this app calls."""
+A person saves their key ONCE, on their Brassworks profile (the dashboard, dashboard/app/keys.py), where it is encrypted and never sent back to a
+browser; this app keeps none. It asks the dashboard for it when it is about to use it, forwarding the person's own sign-in cookie
+(shared_python.user_keys), so it can only ever be theirs. This module is the same idea as trip-planning's apikeys.py, for the one provider this
+app calls."""
 import logging
-from typing import NamedTuple, Optional, Tuple
+from typing import NamedTuple, Optional
 
-import requests
 from fastapi import HTTPException
-from shared_python import keystore
-from shared_python.keystore import KeyStorageNotConfigured, clean, scrub, storage_available  # noqa: F401 (the routes use these)
+from shared_python import user_keys
 from sqlalchemy.orm import Session
 
-from . import config, crud, models
+from . import config, crud
 
 log = logging.getLogger(__name__)
 
 PROVIDER = "anthropic"
-TIMEOUT = 10
 GET_KEY_URL = "https://console.anthropic.com/settings/keys"
-
-
-def _row(db: Session) -> Optional[models.UserApiKey]:
-    return db.query(models.UserApiKey).filter_by(provider=PROVIDER).first()  # only the signed-in person's own (shared_python.owned)
-
-
-def save(db: Session, raw_key: str) -> models.UserApiKey:
-    key = clean(raw_key)
-    token = keystore.encrypt(key)
-    row = _row(db)
-    if row is None:
-        row = models.UserApiKey(provider=PROVIDER, encrypted_key=token, last4=keystore.last4(key))
-        db.add(row)
-    else:
-        row.encrypted_key, row.last4 = token, keystore.last4(key)
-    db.commit()
-    db.refresh(row)
-    return row
-
-
-def remove(db: Session) -> bool:
-    row = _row(db)
-    if row is None:
-        return False
-    db.delete(row)
-    db.commit()
-    return True
 
 
 class KeyChoice(NamedTuple):
@@ -60,9 +31,20 @@ class KeyChoice(NamedTuple):
     metered: bool  # True when it is the server's key used by an allowed (non-administrator) person: the run is counted against their month
 
 
-def _own_key(db: Session) -> Optional[str]:
-    row = _row(db)
-    return keystore.decrypt(row.encrypted_key, PROVIDER) if row is not None else None
+def _own_key(db=None) -> Optional[str]:
+    """The key this person saved on the dashboard, or None. Fetched with their own sign-in cookie for this request (or the session a
+    background job was handed, see scoring.py); a dashboard that cannot be reached is an HTTP 503 with a sentence, never a missing key.
+    (Tests replace this function to give each test person a key.)"""
+    return user_keys.fetch(PROVIDER)
+
+
+def _saved() -> Optional[dict]:
+    """What they saved ({"last4", "added_at"}), for showing what is set. A dashboard that cannot be reached says nothing is saved, rather than
+    failing a page that does not need the key."""
+    try:
+        return user_keys.status().get(PROVIDER)
+    except HTTPException:
+        return None
 
 
 def _house_grant(db: Session, account) -> bool:
@@ -97,41 +79,17 @@ def pick(db: Session, account) -> KeyChoice:
 
 
 def status(db: Session, account) -> dict:
-    row = _row(db)
-    readable = row is not None and keystore.decrypt(row.encrypted_key, PROVIDER) is not None
+    mine = _saved()
     house = bool(account.is_admin and config.ANTHROPIC_API_KEY)
     granted = _house_grant(db, account)
     left = runs_left(db, account) if granted else None  # None: no limit
     return {
-        "can_save": storage_available(),
-        "has_own_key": row is not None,
-        "own_key_readable": readable if row is not None else True,
-        "last4": row.last4 if row is not None else None,
-        "using_house_key": (house or granted) and not readable,
-        "usable": readable or house or (granted and (left is None or left > 0)),
+        "has_own_key": mine is not None,
+        "last4": mine["last4"] if mine else None,
+        "using_house_key": (house or granted) and mine is None,
+        "usable": mine is not None or house or (granted and (left is None or left > 0)),
         "system_key": granted,  # an administrator lets this person fall back to the system key
         "system_runs_left": left,  # null: no limit
         "system_runs_limit": config.HOUSE_KEY_CALLS_PER_MONTH if granted and config.HOUSE_KEY_CALLS_PER_MONTH > 0 else None,
         "get_url": GET_KEY_URL,
     }
-
-
-def verify(key: str) -> Tuple[Optional[bool], str]:
-    """One tiny real call so a typo is caught while the person is still on the page. (True, "") if Anthropic accepted it,
-    (False, why) if it refused it, (None, why) if we could not tell (then the key is saved and the person is told it was not
-    checked)."""
-    try:
-        r = requests.get(
-            "https://api.anthropic.com/v1/models",
-            params={"limit": 1},
-            headers={"x-api-key": key, "anthropic-version": "2023-06-01"},
-            timeout=TIMEOUT,
-        )
-    except (requests.RequestException, ValueError) as exc:
-        log.warning("Checking an Anthropic key failed: %s", type(exc).__name__)  # the type only: a message can echo the URL
-        return None, "Couldn't reach Anthropic to check the key"
-    if r.status_code in (401, 403):
-        return False, "Anthropic didn't accept that key"
-    if r.ok:
-        return True, ""
-    return None, f"Anthropic answered with an error ({r.status_code})"

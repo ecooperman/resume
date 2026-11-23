@@ -78,27 +78,24 @@ async function loadKey() {
   updateDraftButton();
 }
 
+// Where the person saves their key: once, on their Brassworks profile (the dashboard), where every app then uses it. This page only says what is set.
+function profileLink(text) {
+  const home = Global.dashboardUrl && Global.dashboardUrl();
+  const link = el("a", { class: "secondary-btn", href: home ? `${home}profile.html#keys-section` : "#", target: "_blank", rel: "noopener", "data-btn-icon": "external", text });
+  if (!home) link.classList.add("hidden");
+  return link;
+}
+
 function renderKey() {
   const body = $("key-body");
   $("key-done").classList.toggle("hidden", !keyStatus.usable);
   const parts = [];
-  if (keyStatus.has_own_key && keyStatus.own_key_readable) {
-    const remove = el("button", { type: "button", class: "cancel-btn", text: "Remove my key" });
-    remove.addEventListener("click", async () => {
-      if (!confirm("Remove your saved key? You can add it again any time.")) return;
-      try {
-        keyStatus = await Global.withLoading($("key-body"), Global.fetchJSON("/api/api-key", { method: "DELETE" }));
-        renderKey();
-        updateDraftButton();
-      } catch (err) {
-        Global.showMessage(err.message, "error");
-      }
-    });
-    parts.push(el("p", { class: "hint", text: `Your key (ending ${keyStatus.last4}) is saved, encrypted. Only you can use it, and it is never shown again.` }), remove);
+  if (keyStatus.has_own_key) {
+    parts.push(
+      el("p", { class: "hint", text: `Your key (ending ${keyStatus.last4}) is saved on your Brassworks profile, encrypted. Only you can use it, and it is never shown again. Change or remove it there.` }),
+      profileLink("Manage my key")
+    );
   } else {
-    if (keyStatus.has_own_key) {
-      parts.push(el("p", { class: "hint is-error", text: "A saved key couldn't be read (the server's secret changed). Paste it again." }));
-    }
     if (keyStatus.using_house_key && keyStatus.system_key) {
       // Someone the administrator let fall back to the system key: say so plainly, and that their own key still takes over if they add one.
       const limit = keyStatus.system_runs_limit ? ` You have ${keyStatus.system_runs_left} of ${keyStatus.system_runs_limit} AI runs left this month.` : "";
@@ -112,47 +109,12 @@ function renderKey() {
         el("ol", { class: "steps-list" }, [
           el("li", {}, [consoleLink("Open the Anthropic Console"), document.createTextNode(" and sign up (or sign in). This is console.anthropic.com, not claude.ai.")]),
           el("li", { text: "Add credit: in the Console go to Settings, then Billing, and buy a small amount of credit (the smallest, about $5, is plenty to start). Without credit the key is created but every run fails." }),
-          el("li", { text: "Go to Settings, then API keys, press Create key, give it any name (for example Jobs app) and copy it. The Console shows the whole key only once, so paste it here straight away." }),
-          el("li", { text: "Paste it in the box below and press Save key. It is saved encrypted, only you can use it, and it is never shown again." }),
+          el("li", { text: "Go to Settings, then API keys, press Create key, give it any name (for example Jobs app) and copy it. The Console shows the whole key only once, so keep it until the next step." }),
+          el("li", { text: "Open your Brassworks profile with the button below, paste the key under Anthropic and press Save and check. It is saved encrypted, only you can use it, and it is never shown again. Then come back here and reload this page." }),
         ]),
-        el("p", { class: "hint", text: "What it costs, roughly: a first resume draft 10 to 50 cents; scoring one job a few cents; a tailored resume and cover letter for one job a few tens of cents. You can see exactly what you have spent in the Anthropic Console, and set a spending limit there." })
+        el("p", { class: "hint", text: "What it costs, roughly: a first resume draft 10 to 50 cents; scoring one job a few cents; a tailored resume and cover letter for one job a few tens of cents. You can see exactly what you have spent in the Anthropic Console, and set a spending limit there." }),
+        profileLink("Save my key on my profile")
       );
-    }
-    if (keyStatus.can_save === false) {
-      parts.push(el("p", { class: "hint is-error", text: "Saving keys isn't set up on the server yet. Ask the administrator." }));
-    } else {
-      const input = el("input", {
-        type: "password",
-        placeholder: "Paste your Anthropic key",
-        autocomplete: "off",
-        "data-1p-ignore": "",
-        "data-lpignore": "true",
-        "data-bwignore": "true",
-        "data-form-type": "other",
-        "aria-label": "Your Anthropic key",
-      });
-      const save = el("button", { type: "button", class: "secondary-btn", "data-btn-icon": "lock", text: "Save key" });
-      const problem = el("p", { class: "hint is-error hidden" });
-      const submit = async () => {
-        if (!input.value.trim()) return;
-        save.disabled = true;
-        problem.classList.add("hidden");
-        try {
-          const result = await Global.withLoading($("key-body"), Global.fetchJSON("/api/api-key", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ key: input.value }) }));
-          keyStatus = result.status;
-          if (result.note) Global.showMessage(result.note, "error");
-          else Global.showMessage("Key saved.", "success");
-          renderKey();
-          updateDraftButton();
-        } catch (err) {
-          problem.textContent = err.message;
-          problem.classList.remove("hidden");
-          save.disabled = false;
-        }
-      };
-      save.addEventListener("click", submit);
-      input.addEventListener("keydown", (e) => e.key === "Enter" && (e.preventDefault(), submit()));
-      parts.push(el("div", { class: "member-add" }, [input, save]), problem);
     }
   }
   body.replaceChildren(...parts);

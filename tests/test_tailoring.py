@@ -13,6 +13,7 @@ from app.database import SessionLocal
 from tests.test_accounts import ADMIN, key, people, person, production  # noqa: F401 - fixtures
 from tests.test_builder import KEY_A, Cut, Fake, accepts, key_storage  # noqa: F401 - key_storage is an autouse fixture
 from tests.test_job_scoring import JD, SERVER_KEY, server_key  # noqa: F401 - server_key is an autouse fixture
+from tests.dashboard_keys import save_key  # noqa: E402
 
 RESUME = """basics:
   name: Bob Builder
@@ -54,7 +55,7 @@ def ready(person, monkeypatch, answers, email="bob@example.com", with_key=True, 
     fake = Fake(monkeypatch, answers)
     who = person(email)
     if with_key:
-        who.put("/api/api-key", json={"key": KEY_A})
+        save_key(who, KEY_A)
     if with_resume:
         resp = who.post("/api/people", json={"name": "Bob", "resume_yaml": RESUME})
         assert resp.status_code == 200, resp.text

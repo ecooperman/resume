@@ -186,3 +186,11 @@ def db():
     session = SessionLocal()
     yield session
     session.close()
+
+
+@pytest.fixture(autouse=True)
+def _keys_saved_on_the_dashboard(monkeypatch):
+    """What people saved on the dashboard (see tests/dashboard_keys.py), empty at the start of every test."""
+    from tests import dashboard_keys
+
+    dashboard_keys.install(monkeypatch)

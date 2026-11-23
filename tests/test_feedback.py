@@ -10,6 +10,7 @@ import yaml
 from app import feedback, limits
 from tests.test_accounts import ADMIN, key, people, person, production  # noqa: F401 - fixtures
 from tests.test_builder import KEY_A, Fake, GOOD_YAML, accepts, key_storage  # noqa: F401 - key_storage is an autouse fixture
+from tests.dashboard_keys import save_key  # noqa: E402
 
 
 def where(suggestions, level=None):
@@ -285,7 +286,7 @@ REVIEW = json.dumps([
 
 
 def with_key(who):
-    who.put("/api/api-key", json={"key": KEY_A})
+    save_key(who, KEY_A)
     return who
 
 

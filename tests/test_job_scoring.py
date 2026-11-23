@@ -8,6 +8,7 @@ from app import config, generate, models
 from app.database import SessionLocal
 from tests.test_accounts import ADMIN, bobs_resume, key, people, person, production  # noqa: F401 - fixtures
 from tests.test_builder import KEY_A, Cut, Fake, accepts, key_storage  # noqa: F401 - key_storage is an autouse fixture
+from tests.dashboard_keys import save_key  # noqa: E402
 
 SERVER_KEY = "sk-ant-api03-the-servers-own-key-9999"
 JD = "We need a Staff Engineer with Python and Kubernetes. Pay: $200,000 - $240,000. Kubernetes is preferred."
@@ -30,7 +31,7 @@ def ready(person, monkeypatch, answers, email="bob@example.com", with_key=True, 
     fake = Fake(monkeypatch, answers)
     who = person(email)
     if with_key:
-        who.put("/api/api-key", json={"key": KEY_A})
+        save_key(who, KEY_A)
     if with_resume:
         bobs_resume(who)
     return who, fake
@@ -133,7 +134,7 @@ def test_a_job_tied_to_a_resume_is_scored_against_that_one(person, people, monke
     accepts(monkeypatch)
     fake = Fake(monkeypatch, [json.dumps(SCORE)])
     owner = person(ADMIN)
-    owner.put("/api/api-key", json={"key": KEY_A})
+    save_key(owner, KEY_A)
     owner.post("/api/people", json={"name": "First", "slug": "first", "resume_yaml": "basics: {name: FIRST-RESUME-PERSON}"})
     second = owner.post("/api/people", json={"name": "Second", "slug": "second", "resume_yaml": "basics: {name: SECOND-RESUME-PERSON}"}).json()
     j = job(owner, person_id=second["id"])

@@ -110,8 +110,6 @@ lets people in on the Users page or the dashboard's People page), every resume a
 - **Published** (`people.published`): the public site (`app/main.py`, port 8040, no sign-in) only ever shows a resume that is published, by `?person=`, as the
   default, or through an access code; anything else is a 404 exactly like an unknown slug. The migration published every existing resume (they were all public);
   new ones start unpublished (an administrator's form has a "Show on the public site" tick, on by default). `build.py` only builds published people.
-- **time-management's calls** (`/api/resume-people`, `/api/resume-data`, `/api/render`, `/api/render-cover-letter`) carry no sign-in, only `X-Internal-Token`, and act
-  as the first administrator; nothing else accepts that token.
 - The command-line tools (`manage.py`, `build.py`) are the operator at the keyboard, so they look past the per-person filter on purpose (`owned.unscoped()`);
   `manage.py seed-person` takes `--owner <email>` (default: the first administrator), and only an administrator's resume can ever be the default.
 - Tests: `pytest` (no browser needed; PDF and Word rendering are replaced by tiny stand-ins). They include a two-person test that calls every route against another
@@ -128,7 +126,7 @@ migrations at a copy of `access.db`.
 
 ## Editing your resume
 
-Edit it through the admin page's People section (not a file - see "People"
+Edit it through the admin page's Resumes page (not a file - see "Resumes"
 below for why), then regenerate the public site:
 
 ```bash
@@ -311,11 +309,11 @@ python manage.py revoke <code-or-id>
 Revoking (either way) is immediate - the next request with that code falls
 back to the public/redacted version, same as an invalid or expired one.
 
-## People (resume storage)
+## Resumes (resume storage)
 
 Every resume - including the default one this site itself renders - is a
 row in this app's own `access.db` (`app/models.Person`: `slug`, `name`,
-`resume_yaml`, `is_default`), managed entirely through the "People" section
+`resume_yaml`, `is_default`), managed entirely through the "Resumes" page
 of the admin page (same hostname/port as the access-code admin above,
 gated the same way - the dashboard sign-in plus an account in this app).
 There is deliberately no file-based resume storage anywhere in this repo
@@ -330,43 +328,13 @@ resume.evancooperman.com, or a bare `/api/resume-data` call) resolves to.
 see "Editing your resume" above.
 
 First-time bootstrap from an existing file (not needed for ongoing edits -
-those go through the People UI):
+those go through the Resumes page):
 
 ```bash
 python manage.py seed-person --slug evan --name "Evan Cooperman" --file evan-resume.yaml --default
 ```
 
 ## Internal API (for time-management's resume generation)
-
-`app/admin.py` exposes three extra endpoints, purely for the
-`time-management` app's "Generate Resume" feature - not meant for browser
-use, and not part of the access-code system above:
-
-- `GET /api/resume-people` - every person available to tailor from, as
-  `{slug, name, is_default}` - source list for time-management's per-person
-  "Resume" dropdown (People, in its Settings page), so a household member
-  other than the default person can generate from their own resume (e.g.
-  slug `"rach"`) instead.
-- `GET /api/resume-data?person=<slug>` - the given person's resume data (by
-  slug - defaults to whoever `is_default=True` is if `person` is omitted),
-  as JSON. 404s on an unknown slug.
-- `POST /api/render` - `{"data": {...resume-shaped dict...}, "format":
-  "pdf"|"docx"}` -> renders it via the same pipeline as `build.py`
-  (`app/render.py`), into a throwaway temp directory that never touches
-  `site/` or the `people` table - returns the file bytes. Used to turn a
-  *tailored* resume (someone else's data shaped like a resume yaml file, not
-  necessarily this one) into a real PDF/DOCX.
-
-All three require an `X-Internal-Token` header matching the
-`INTERNAL_API_TOKEN` environment variable. None are reachable through
-Cloudflare (this port has no tunnel route - see "Access" below), so the
-token is defense in depth
-against another process on the same droplet, not the primary access control.
-**Must be set to the exact same value as `INTERNAL_API_TOKEN` on the
-`time-management` app** - see that app's README. Locally, export it in your
-shell before running `uvicorn app.admin:app`; on the droplet, set it in
-`/etc/systemd/system/resume.service` (never commit the real value -
-see `deploy/resume.service` for the placeholder line).
 
 `app/admin.py` also serves the builder's routes; see "The builder" above.
 
@@ -455,9 +423,7 @@ for the second service.
    `playwright install chromium` (cache hit, no root needed) before
    `python build.py`, already in `.github/workflows/deploy.yml`.
 
-5. **systemd unit** - set the real `INTERNAL_API_TOKEN` value in
-   `resume.service` before installing it (matching whatever you set on
-   `time-management.service` - see that repo's one-time setup), then:
+5. **systemd unit** - copy it in (there is no token to set: the old `INTERNAL_API_TOKEN` was removed with time-management's retired calls), then:
    ```bash
    sudo cp /opt/apps/resume/deploy/resume.service /etc/systemd/system/
    sudo systemctl daemon-reload

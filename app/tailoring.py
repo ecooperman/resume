@@ -63,7 +63,7 @@ def start(db, account: Account, job) -> dict:
     try:
         resume_data = yaml.safe_load(person.resume_yaml)
     except yaml.YAMLError:
-        raise HTTPException(status_code=400, detail="Your resume couldn't be read: fix it on the People page first.")
+        raise HTTPException(status_code=400, detail="Your resume couldn't be read: fix it on the Resumes page first.")
     choice = apikeys.pick(db, account)
     try:
         limits.start(("tailor", account.id), max_runs=config.TAILORS_PER_HOUR, what="make a tailored resume")

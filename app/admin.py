@@ -11,7 +11,6 @@ has to get right on every request. See README.md.
 Shares the same access_codes table as app/main.py/manage.py via crud.py.
 """
 import difflib
-import os
 import re
 import shutil
 import tempfile
@@ -20,9 +19,9 @@ from pathlib import Path
 from typing import Literal, Optional
 
 import yaml
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from shared_python import accounts_gate, feedback_relay, oidc_login, owned, user_keys
+from shared_python import accounts_gate, feedback_relay, oidc_login, owned, pages, user_keys
 from shared_python.accounts_gate import Account
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -50,6 +49,7 @@ app.include_router(stats.router)
 user_keys.install(app)  # remembers the request's sign-in cookie, so the person's key can be fetched from the dashboard for this request only
 feedback_relay.install(app, "resume")  # the shared Send feedback form posts here; passed on to the dashboard's inbox (behind the accounts gate)
 templates = Jinja2Templates(directory=str(ADMIN_TEMPLATES_DIR))
+pages.install(templates)
 
 
 @app.get("/api/me")
@@ -84,7 +84,7 @@ def _page(name: str, admin_only: bool = False):
     return route
 
 
-# The front page is Start here (what the app does and what to do next); the resumes (People for an administrator, My resume for everyone else) are at /people.html.
+# The front page is Start here (what the app does and what to do next); the resumes (Resumes for an administrator, My resume for everyone else) are at /people.html.
 app.get("/", response_class=HTMLResponse)(_page("welcome.html"))
 app.get("/welcome.html", response_class=HTMLResponse)(_page("welcome.html"))
 app.get("/people.html", response_class=HTMLResponse)(_page("people.html"))
@@ -102,100 +102,6 @@ def contact_page():
     go to the dashboard's one inbox. Old links (the Chrome extension's, bookmarks) land on the front page with the form open."""
     return RedirectResponse("/?feedback=1", status_code=302)
 
-
-
-# --- internal-only endpoints, for the time-management app's resume
-# generation feature (see time-management's app/resume_gen.py). Not exposed
-# through Cloudflare - this port has no tunnel route - but gated by a shared
-# secret anyway as defense in depth against any other same-droplet process.
-def require_internal_token(x_internal_token: Optional[str] = Header(default=None)):
-    expected = os.environ.get("INTERNAL_API_TOKEN")
-    if not expected:
-        # Fails closed: if the operator hasn't set the token, these routes
-        # are unusable rather than silently unauthenticated.
-        raise HTTPException(status_code=503, detail="INTERNAL_API_TOKEN is not configured")
-    if x_internal_token != expected:
-        raise HTTPException(status_code=403, detail="Invalid or missing internal token")
-
-
-class RenderRequest(BaseModel):
-    data: dict
-    format: Literal["pdf", "docx"]
-
-
-class CoverLetterRenderRequest(BaseModel):
-    basics: dict
-    cover_letter_text: str
-    format: Literal["pdf", "docx"]
-
-
-@app.get("/api/resume-people", dependencies=[Depends(require_internal_token)])
-def list_resume_people(db: Session = Depends(get_db)):
-    """Every person available to tailor from - source list for the
-    time-management app's per-person resume dropdown (see People in its
-    Settings page)."""
-    return {"people": [{"slug": p.slug, "name": p.name, "is_default": p.is_default} for p in crud.list_people(db)]}
-
-
-@app.get("/api/resume-data", dependencies=[Depends(require_internal_token)])
-def get_resume_data(person: Optional[str] = None, db: Session = Depends(get_db)):
-    """The given person's resume data (by slug), or the default person's if
-    person is omitted, as JSON - source data for tailoring a resume to a
-    specific job elsewhere. Read fresh from the DB on every call, so an
-    edit made through the People admin UI is always picked up immediately."""
-    row = crud.get_person_by_slug(db, person) if person else crud.get_default_person(db)
-    if row is None:
-        detail = f"No such person: {person!r}" if person else "No default person is configured yet"
-        raise HTTPException(status_code=404, detail=detail)
-    return yaml.safe_load(row.resume_yaml)
-
-
-@app.post("/api/render", dependencies=[Depends(require_internal_token)])
-def render_document(body: RenderRequest):
-    """Render arbitrary resume-shaped data (e.g. a job-tailored variant, not
-    necessarily this repo's own evan-resume.yaml) into a PDF or DOCX. Always
-    writes into a throwaway temp directory - this never touches site/ or
-    any resume yaml file, so it can't affect the real resume site."""
-    with tempfile.TemporaryDirectory() as tmp:
-        out_dir = Path(tmp)
-        try:
-            if body.format == "pdf":
-                render.build_pdf(body.data, out_dir)
-                out_path = out_dir / "resume.pdf"
-                media_type = "application/pdf"
-            else:
-                render.build_docx(body.data, out_dir)
-                out_path = out_dir / "resume.docx"
-                media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        except Exception as e:
-            # Most likely a malformed/incomplete resume-shaped payload (e.g.
-            # missing "basics") surfacing as a Jinja2 UndefinedError or a
-            # plain KeyError, rather than an operational failure.
-            raise HTTPException(status_code=400, detail=f"Could not render resume data: {e}")
-        return Response(content=out_path.read_bytes(), media_type=media_type)
-
-
-@app.post("/api/render-cover-letter", dependencies=[Depends(require_internal_token)])
-def render_cover_letter_document(body: CoverLetterRenderRequest):
-    """Render a generated cover letter (basics for the letterhead + the
-    plain-text body from time-management's resume-generation feature) into
-    a PDF or DOCX. Same throwaway-temp-dir pattern as /api/render - there's
-    no cover-letter equivalent of a stored per-person template, this is
-    always ad-hoc content passed straight through from the caller."""
-    with tempfile.TemporaryDirectory() as tmp:
-        out_dir = Path(tmp)
-        try:
-            if body.format == "pdf":
-                render.build_cover_letter_pdf(body.basics, body.cover_letter_text, out_dir)
-                out_path = out_dir / "cover_letter.pdf"
-                media_type = "application/pdf"
-            else:
-                render.build_cover_letter_docx(body.basics, body.cover_letter_text, out_dir)
-                out_path = out_dir / "cover_letter.docx"
-                media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Could not render cover letter: {e}")
-        return Response(content=out_path.read_bytes(), media_type=media_type)
 
 
 # --- The builder: browser-facing. Takes what a person uploads, drafts a resume.yaml for the page to show for review, and

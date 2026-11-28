@@ -59,7 +59,7 @@ def main():
         db.close()
     if not people:
         # Not a fatal error: deploy.yml runs this unconditionally on every
-        # push, including the very first deploy of the People feature
+        # push, including the very first deploy of the Resumes feature
         # itself, when the freshly-migrated people table is still empty
         # (nobody's been added through the admin UI yet). Failing hard here
         # would abort deploy.yml's whole script (set -e) before it ever
@@ -70,7 +70,7 @@ def main():
         # deploy is affected.
         print(
             "warning: no people are set up yet - skipping the site build. "
-            "Add someone via the admin UI (People) and re-run `python "
+            "Add someone via the admin UI (Resumes) and re-run `python "
             "build.py` by hand, or just push again once one exists.",
             file=sys.stderr,
         )

@@ -344,65 +344,20 @@ def test_the_first_administrator_takes_over_the_resumes_that_existed_before_acco
     assert person("carol@example.com").get("/api/people").json() == []
 
 
-# --- time-management's server-to-server calls -------------------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def with_token(monkeypatch):
-    monkeypatch.setenv("INTERNAL_API_TOKEN", "internal-secret")
-    return {"X-Internal-Token": "internal-secret"}
-
-
-def internal(headers=None):
-    return TestClient(admin.app, base_url="https://resume-admin.example.org", follow_redirects=False, headers=headers or {})
-
-
-def test_the_internal_token_acts_as_the_administrator_and_sees_only_the_administrators_resumes(person, people, with_token):
-    owners_resume(person(ADMIN))
-    bobs_resume(person("bob@example.com"))
-    listed = internal(with_token).get("/api/resume-people")
-    assert listed.status_code == 200 and [p["slug"] for p in listed.json()["people"]] == ["owner"]
-    data = internal(with_token).get("/api/resume-data")
-    assert data.status_code == 200 and data.json()["basics"]["name"] == "Owner"
-    assert "Bob" not in listed.text + data.text
-
-
-def test_the_internal_token_cannot_reach_a_persons_resume_by_slug(person, people, with_token):
-    slug = bobs_resume(person("bob@example.com"))["slug"]
-    owners_resume(person(ADMIN))
-    assert internal(with_token).get("/api/resume-data", params={"person": slug}).status_code == 404
-
-
-def test_the_internal_token_renders_what_it_is_given(person, people, with_token):
-    owners_resume(person(ADMIN))
-    pdf = internal(with_token).post("/api/render", json={"data": {"basics": {"name": "Tailored"}}, "format": "pdf"})
-    assert pdf.status_code == 200 and pdf.content == b"PDF Tailored"
+# --- the old server-to-server calls are gone ---------------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("method,path", [
-    ("GET", "/api/people"), ("POST", "/api/people"), ("GET", "/api/users"), ("GET", "/api/codes"), ("POST", "/api/generate-resume"), ("GET", "/api/generate-resume/status"),
-    ("GET", "/api/me"), ("GET", "/"), ("DELETE", "/api/people/1"),
+    ("GET", "/api/resume-people"), ("GET", "/api/resume-data"), ("POST", "/api/render"), ("POST", "/api/render-cover-letter"),
 ])
-def test_the_internal_token_opens_nothing_but_the_four_agreed_calls(person, people, with_token, method, path):
-    owners_resume(person(ADMIN))
-    assert internal(with_token).request(method, path, json={}).status_code in (401, 302, 403)
-
-
-def test_a_wrong_or_missing_token_or_none_configured_opens_nothing(person, people, monkeypatch):
-    owners_resume(person(ADMIN))
-    assert internal().get("/api/resume-people").status_code == 401
+def test_time_managements_old_calls_no_longer_exist_for_anyone_even_with_a_token(person, people, monkeypatch, method, path):
+    """They served time-management's retired Jobs page (an internal token acting as the administrator); nothing opens them any more."""
     monkeypatch.setenv("INTERNAL_API_TOKEN", "internal-secret")
-    assert internal({"X-Internal-Token": "wrong"}).get("/api/resume-people").status_code == 401
-    monkeypatch.delenv("INTERNAL_API_TOKEN")
-    assert internal({"X-Internal-Token": ""}).get("/api/resume-people").status_code == 401
-    assert internal({"X-Internal-Token": "internal-secret"}).get("/api/resume-people").status_code == 401
-
-
-def test_a_signed_in_person_still_needs_the_token_for_the_internal_calls(person, people, with_token):
-    bob = person("bob@example.com")
-    assert bob.get("/api/resume-people").status_code == 403
-    assert bob.get("/api/resume-data").status_code == 403
-    assert person(ADMIN).get("/api/resume-people").status_code == 403  # even the administrator, without it
+    owners_resume(person(ADMIN))
+    anonymous = TestClient(admin.app, base_url="https://resume-admin.example.org", follow_redirects=False, headers={"X-Internal-Token": "internal-secret"})
+    assert anonymous.request(method, path, json={}).status_code in (401, 302)
+    signed_in = person(ADMIN)
+    assert signed_in.request(method, path, json={}).status_code in (404, 405)
 
 
 # --- the rest of the gate ---------------------------------------------------------------------------------------------------------

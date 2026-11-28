@@ -15,7 +15,7 @@ app/main.py's _resolve_dir - printed automatically by `create` below).
 Also has a one-time bootstrap helper for loading an existing resume yaml
 *file* into the people table as a real Person row (see app/models.py) --
 useful once, to seed the first person or two from an existing file; every
-edit after that goes through the admin UI (People), never a file again:
+edit after that goes through the admin UI (Resumes), never a file again:
 
     python manage.py seed-person --slug evan --name "Evan Cooperman" \\
         --file evan-resume.yaml --default

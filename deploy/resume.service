@@ -10,13 +10,6 @@ WorkingDirectory=/opt/apps/resume
 # DEPLOYMENT.md's "Shared secrets" step. The leading "-" means a missing
 # file isn't an error, so an app that doesn't use any of them still starts.
 EnvironmentFile=-/etc/personal-apps/shared.env
-# INTERNAL_API_TOKEN gates the /api/resume-data and /api/render endpoints
-# time-management's resume-generation feature calls (the admin half of this
-# process; the public half never reads it) - set the real value here
-# directly on the droplet (never commit it): sudo systemctl edit resume, or
-# edit this file in place after copying it in. Must match the value set on
-# time-management.service.
-Environment=INTERNAL_API_TOKEN=
 # One process serves both sites and tells them apart by the Host header
 # (RESUME_ADMIN_HOSTS, default jobs.evancooperman.com, the old
 # resume-admin.evancooperman.com alias, jobs.localhost and resume-admin.localhost;

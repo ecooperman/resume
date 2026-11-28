@@ -64,7 +64,7 @@ def score_one(db, account: Account, job: models.Job) -> models.Job:
     try:
         resume_data = yaml.safe_load(person.resume_yaml)
     except yaml.YAMLError:
-        raise HTTPException(status_code=400, detail="Your resume couldn't be read: fix it on the People page first.")
+        raise HTTPException(status_code=400, detail="Your resume couldn't be read: fix it on the Resumes page first.")
     choice = apikeys.pick(db, account)
     try:
         limits.start(("score", account.id), max_runs=config.SCORES_PER_HOUR, what="score")

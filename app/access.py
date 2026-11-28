@@ -9,16 +9,10 @@ runs each request inside that person's scope, so every database read and write i
 code (shared_python.owned). Only an administrator may manage access codes, publish a resume, choose the site's default
 person, or use the server's Anthropic key (app/admin.py).
 
-One exception, for time-management's resume tailoring: its four server-to-server calls (the people list, the resume data, and
-the two renders) carry no sign-in, only the shared internal token, and act as the first administrator (so they only ever see
-the administrator's own resumes).
-
 This is the ADMIN app (port 8041). The public resume site (app/main.py, port 8040) has no sign-in on purpose and only ever shows
 a resume an administrator has published."""
-import hmac
-import os
 import re
-from typing import Optional, Union
+from typing import Union
 
 from shared_python import accounts_gate, usage
 from shared_python.accounts_gate import Account
@@ -26,12 +20,6 @@ from shared_python.accounts_gate import Account
 from . import config, crud, models
 from .database import SessionLocal
 
-_INTERNAL_CALLS = (
-    ("GET", re.compile(r"^/api/resume-people$")),
-    ("GET", re.compile(r"^/api/resume-data$")),
-    ("POST", re.compile(r"^/api/render$")),
-    ("POST", re.compile(r"^/api/render-cover-letter$")),
-)
 PUBLIC_PATHS = ()  # nothing in the admin app is public
 seen = usage.LastSeen(SessionLocal, app="resume")  # when each person was last here, for the dashboard's stats pages
 
@@ -51,25 +39,11 @@ def account_for(email: str) -> Union[Account, str]:
         return Account(id=user.id, email=user.email, is_admin=is_admin)
 
 
-def internal_call(request) -> Optional[Account]:
-    """time-management's four server-to-server calls, acting as the first administrator (and nobody else)."""
-    if not any(request.method == method and rx.match(request.url.path) for method, rx in _INTERNAL_CALLS):
-        return None
-    expected = os.environ.get("INTERNAL_API_TOKEN")
-    supplied = request.headers.get("x-internal-token", "")
-    if not expected or not hmac.compare_digest(supplied.encode(), expected.encode()):
-        return None
-    admins = sorted(config.ADMIN_EMAILS)
-    found = account_for(admins[0]) if admins else None
-    return found if isinstance(found, Account) else None
-
-
 def install(app) -> None:
     accounts_gate.install(
         app,
         account_for=account_for,
         dev_user_email=config.DEV_USER_EMAIL,
-        service_account=internal_call,
         public_paths=PUBLIC_PATHS,
         seen=seen,
     )

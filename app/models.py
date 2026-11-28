@@ -128,7 +128,7 @@ class Job(Base, owned.OwnedMixin):
     url = Column(String, nullable=True)  # a pasted job may have none
     applied = Column(Boolean, nullable=False, default=False, server_default="0")
     notes = Column(Text, nullable=True)
-    person_id = Column(Integer, ForeignKey("people.id"), nullable=True)
+    person_id = Column(Integer, ForeignKey("people.id"), nullable=True, index=True)
     salary = Column(String, nullable=True)
     tier = Column(String, nullable=True)  # Strong | Good | Possible | Weak | Unclear, or null: not scored yet
     summary = Column(Text, nullable=True)
